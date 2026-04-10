@@ -248,3 +248,10 @@ Also decided shisad consumption model: bare `textguard` and `textguard[yara]` go
 **Decision/Change**: Rewrote the remaining direct references in `docs/PLAN.md`, `docs/DEV.md`, and `docs/IMPLEMENTATION.md` so they now refer to `shisad` migration work generically rather than pointing at a removed `textguard` repo document.
 **Rationale**: `textguard` should document its own contract, implementation, and release behavior. The downstream adoption plan belongs with `shisad`; keeping only generic references here avoids dead links without erasing the fact that `shisad` migration still exists as adjacent work.
 **Open questions**: None.
+
+### 2026-04-11 — Public-repo readiness doc cleanup
+
+**Context**: Before pushing the repository public on GitHub, two public-facing status documents were still stale from the pre-implementation phase: the `README.md` status section still implied reviewer hardening work remained outstanding, and `CHANGELOG.md` still claimed the repo had no runtime code.
+**Decision/Change**: Updated `README.md` to describe the implementation as present without the stale caveat, and replaced the placeholder `CHANGELOG.md` unreleased entry with a concise summary of the initial package implementation (core pipeline, CLI, optional YARA/PromptGuard backends, signed model fetch).
+**Rationale**: Public repo metadata should match the current state of the codebase. Leaving pre-implementation placeholder status text in the README or changelog would create avoidable confusion for GitHub readers even though the code itself is ready.
+**Open questions**: None.

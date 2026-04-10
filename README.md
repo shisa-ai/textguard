@@ -6,7 +6,7 @@ Hostile-text normalization, inspection, and cleaning for LLM-adjacent systems.
 
 ## Status
 
-Working implementation in repo. The Python API, CLI, optional YARA backend, optional PromptGuard backend, and signed model fetch flow are all present; reviewer hardening and release work remain. See [docs/PLAN.md](docs/PLAN.md) for the architecture and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for the completed execution checklist.
+Working implementation in repo. The Python API, CLI, optional YARA backend, optional PromptGuard backend, and signed model fetch flow are all present. See [docs/PLAN.md](docs/PLAN.md) for the architecture and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for the completed execution checklist.
 
 ## Protection Tiers
 
