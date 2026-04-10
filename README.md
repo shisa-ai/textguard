@@ -14,7 +14,7 @@ textguard is organized into three tiers. Each adds detection capability on top o
 
 | Tier | Install | What it detects | Footprint |
 |------|---------|----------------|-----------|
-| **Core** | `pip install textguard` | Invisible chars, bidi abuse, tag chars, soft hyphens, variation selectors, zalgo, homoglyphs/mixed-script, encoding layer abuse (URL, HTML entity, ROT13, base64) | stdlib-only, small |
+| **Core** | `pip install textguard` | Invisible chars, bidi abuse, tag chars, soft hyphens, variation selectors, zalgo, homoglyphs/mixed-script, encoding layer abuse (URL, HTML entity, ROT13, base64, Unicode escapes, hex escapes, Punycode) | stdlib-only, small |
 | **YARA** | `pip install 'textguard[yara]'` | Pattern-based detection: prompt injection phrases, tool spoofing tags, custom signatures. Runs against both raw and decoded text. | +~6 MB (`yara-python`) |
 | **PromptGuard** | `pip install 'textguard[promptguard]'` | Semantic prompt injection / jailbreak classification via ONNX model. | +~27 MB wheels (`onnxruntime`, `transformers`) + ~295 MB model on first fetch |
 
@@ -122,7 +122,7 @@ export TEXTGUARD_PROMPTGUARD_MODEL=~/.local/share/textguard/models/promptguard2
 textguard scan --promptguard ~/.local/share/textguard/models/promptguard2 SKILL.md
 ```
 
-A built-in `textguard models fetch promptguard2` command is also available. It downloads from Hugging Face via stdlib HTTP, verifies the SSH ed25519 signature against the bundled public key, and checks SHA-256 file hashes from the manifest.
+The implementation plan also includes a built-in `textguard models fetch promptguard2` command. It will download from Hugging Face via stdlib HTTP, verify the SSH ed25519 signature against the bundled public key, and check SHA-256 file hashes from the manifest.
 
 ## Dependency Direction
 

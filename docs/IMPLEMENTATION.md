@@ -82,11 +82,13 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 - [ ] Implement `src/textguard/decode.py`
   - URL decoding
   - HTML entity decoding
-  - ROT13 decoding
+  - ROT13 decoding (signal-token gated)
   - base64 decoding
   - Unicode escape decoding
   - hex escape decoding
   - punycode decoding
+- [ ] Ensure `normalize.py` and `decode.py` can emit `Finding` objects as they work
+  - detect-as-side-effect for normalization/decode stages
 - [ ] Implement the bounded decode loop
   - layer order per pass:
     - URL
@@ -114,7 +116,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - decode exists for structural analysis and YARA support
   - PromptGuard later consumes raw text only
 - [ ] Add tests for:
-  - benign multilingual text, including Japanese
+  - benign multilingual text, including Japanese, Arabic, and Persian
   - adversarial Unicode
   - decode-depth limiting
   - expansion bounds
@@ -161,11 +163,13 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `Finding.detail` contains only safe metadata
   - never echo raw text content in `detail`
 - [ ] Add tests for:
+  - pipeline flow
   - top-level wrapper parity
   - `decoded_text` propagation
   - `CleanResult.changes`
   - `include_context`
   - safe-by-default findings metadata
+  - config precedence
   - preset semantics
 
 ## Phase 4 — Core detection + generated Unicode data
@@ -189,6 +193,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - combining abuse
 - [ ] Implement `src/textguard/detect/homoglyphs.py`
   - mixed-script detection
+  - confusable skeleton normalization
   - trimmed confusables path (default)
   - full confusables opt-in path (e.g., `TextGuard(confusables="full")` or config option)
 - [ ] Implement `src/textguard/detect/encoded.py`
@@ -228,7 +233,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 - [ ] Implement `textguard models fetch` command surface
   - real implementation can land in Phase 7
   - CLI shape should exist by this phase if practical
-- [ ] Define and implement explicit `scan` exit-code behavior
+- [ ] Define and implement `scan` exit-code behavior that reflects finding severity for CI use
 - [ ] Add CLI tests for:
   - help text
   - stdin/stdout flow
