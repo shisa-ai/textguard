@@ -4,7 +4,7 @@ import textguard
 from textguard import Change, CleanResult, Finding, FindingContext, ScanResult, SemanticResult
 
 
-def test_top_level_import_surface_exposes_phase_one_api() -> None:
+def test_top_level_import_surface_exposes_only_public_api() -> None:
     assert textguard.__version__ == "0.0.0"
     assert textguard.TextGuard().__class__.__name__ == "TextGuard"
     assert callable(textguard.scan)
@@ -15,3 +15,13 @@ def test_top_level_import_surface_exposes_phase_one_api() -> None:
     assert FindingContext is not None
     assert ScanResult is not None
     assert SemanticResult is not None
+    for hidden in (
+        "clean_text",
+        "decode_text_layers",
+        "load_promptguard_backend",
+        "load_yara_backend",
+        "normalize_text",
+        "scan_text",
+        "scores_to_semantic_result",
+    ):
+        assert not hasattr(textguard, hidden)

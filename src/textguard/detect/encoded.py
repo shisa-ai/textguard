@@ -15,6 +15,7 @@ _SPLIT_TOKEN_WORDS: Final[tuple[str, ...]] = (
     "prompt",
     "system",
 )
+_SPLIT_TOKEN_SEPARATOR_MAX: Final = 5
 _SIGNAL_TOKENS: Final[tuple[str, ...]] = (
     "curl",
     "developer",
@@ -91,5 +92,5 @@ def _detect_split_tokens(text: str, *, in_decoded_text: bool) -> list[Finding]:
 
 
 def _split_token_pattern(word: str) -> re.Pattern[str]:
-    separator = r"[\s._:/\\|,\-]*"
+    separator = rf"[\s._:/\\|,\-]{{0,{_SPLIT_TOKEN_SEPARATOR_MAX}}}"
     return re.compile(separator.join(re.escape(char) for char in word), re.IGNORECASE)

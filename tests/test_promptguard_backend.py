@@ -44,6 +44,24 @@ def _write_allowed_signers(path: Path, *, principal: str, public_key: Path) -> N
     )
 
 
+def _sign_manifest(manifest_path: Path, *, key_path: Path) -> None:
+    subprocess.run(
+        [
+            "ssh-keygen",
+            "-Y",
+            "sign",
+            "-f",
+            str(key_path),
+            "-n",
+            "file",
+            str(manifest_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def _write_signed_pack(
     pack_dir: Path,
     *,
@@ -87,21 +105,7 @@ def _write_signed_pack(
         json.dumps(manifest, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    subprocess.run(
-        [
-            "ssh-keygen",
-            "-Y",
-            "sign",
-            "-f",
-            str(key_path),
-            "-n",
-            "file",
-            str(manifest_path),
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
+    _sign_manifest(manifest_path, key_path=key_path)
 
 
 def _spec_for_pack(pack_dir: Path) -> promptguard_backend.PromptGuardModelSpec:
@@ -237,7 +241,7 @@ def test_promptguard_scoring_uses_raw_text_only(
 
     monkeypatch.setattr(
         textguard_module,
-        "load_promptguard_backend",
+        "_load_promptguard_backend",
         fake_load_promptguard_backend,
     )
 
@@ -269,7 +273,7 @@ def test_clean_does_not_load_promptguard_backend(
 
     monkeypatch.setattr(
         textguard_module,
-        "load_promptguard_backend",
+        "_load_promptguard_backend",
         fail_if_called,
     )
 
@@ -376,6 +380,63 @@ def test_fetch_promptguard_model_rejects_hash_mismatch(
     )
 
     with pytest.raises(RuntimeError, match="file_hash_mismatch"):
+        promptguard_backend.fetch_promptguard_model(
+            "promptguard2",
+            install_dir=tmp_path / "installed-model",
+            allowed_signers_path=allowed_signers,
+        )
+
+
+def test_fetch_promptguard_model_rejects_unsafe_manifest_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pack_dir = tmp_path / "remote-pack"
+    pack_dir.mkdir()
+    key_path = _generate_ssh_keypair(tmp_path, name="promptguard-pack-key")
+    allowed_signers = tmp_path / "allowed_signers"
+    _write_allowed_signers(
+        allowed_signers,
+        principal="promptguard",
+        public_key=Path(f"{key_path}.pub"),
+    )
+    manifest = {
+        "created_at": "2026-04-10T00:00:00+00:00",
+        "files": [
+            {
+                "path": "../../../etc/passwd",
+                "sha256": hashlib.sha256(b"evil").hexdigest(),
+                "size": 4,
+            }
+        ],
+        "name": "llama-prompt-guard-2-22m",
+        "provenance": {
+            "builder_id": "tests",
+            "signer_principal": "promptguard",
+            "source_model_id": "meta-llama/Llama-Prompt-Guard-2-22M",
+        },
+        "runtime": {
+            "execution_provider": "CPUExecutionProvider",
+            "format": "onnx",
+            "quantization": "fp32",
+        },
+        "schema_version": "1",
+        "type": "promptguard_model_pack",
+        "version": "onnx-fp32",
+    }
+    manifest_path = pack_dir / "manifest.json"
+    manifest_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=True, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    _sign_manifest(manifest_path, key_path=key_path)
+    monkeypatch.setitem(
+        promptguard_backend.PROMPTGUARD_MODELS,
+        "promptguard2",
+        _spec_for_pack(pack_dir),
+    )
+
+    with pytest.raises(RuntimeError, match="promptguard_pack_invalid_manifest"):
         promptguard_backend.fetch_promptguard_model(
             "promptguard2",
             install_dir=tmp_path / "installed-model",

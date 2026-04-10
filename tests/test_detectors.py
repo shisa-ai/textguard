@@ -67,6 +67,12 @@ def test_split_token_detection_is_opt_in() -> None:
     )
 
 
+def test_split_token_detection_bounds_separator_run_length() -> None:
+    text = "i......g......n......o......r......e harmless prose"
+
+    assert detect_encoded_payloads(text, split_tokens=True) == []
+
+
 def test_benign_japanese_mixed_scripts_are_not_flagged() -> None:
     result = scan("カタカナと漢字")
 
