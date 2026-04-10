@@ -5,7 +5,7 @@ from textguard import Change, CleanResult, Finding, FindingContext, ScanResult, 
 
 
 def test_top_level_import_surface_exposes_only_public_api() -> None:
-    assert textguard.__version__ == "0.9.0"
+    assert textguard.__version__ == "1.0.0"
     assert textguard.TextGuard().__class__.__name__ == "TextGuard"
     assert callable(textguard.scan)
     assert callable(textguard.clean)

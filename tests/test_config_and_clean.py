@@ -12,6 +12,7 @@ def test_config_precedence_is_kwargs_then_env_then_file_then_defaults(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     config_dir = tmp_path / ".config" / "textguard"
     config_dir.mkdir(parents=True)
     (config_dir / "config.toml").write_text(
