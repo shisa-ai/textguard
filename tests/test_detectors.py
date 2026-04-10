@@ -93,6 +93,32 @@ def test_split_token_detection_bounds_separator_run_length() -> None:
     assert detect_encoded_payloads(text, split_tokens=True) == []
 
 
+def test_invisible_math_operators_and_deprecated_formatting_are_detected() -> None:
+    """Regression: U+2061-2065 and U+206A-206F must be detected and stripped.
+
+    shisad strips the full U+2060-206F range. textguard previously only covered
+    U+2060 (word joiner) and U+2066-2069 (bidi isolates), missing 11 invisible
+    formatting codepoints including math operators and deprecated controls.
+    """
+    # U+2062 INVISIBLE TIMES — invisible math operator
+    findings = detect_invisible_text("A\u2062B")
+    assert any(
+        item.kind == "invisible_char" and "U+2062" in item.codepoint for item in findings
+    )
+
+    # U+206A INHIBIT SYMMETRIC SWAPPING — deprecated but valid
+    findings = detect_invisible_text("text\u206Amore")
+    assert any(
+        item.kind == "invisible_char" and "U+206A" in item.codepoint for item in findings
+    )
+
+    # Full pipeline: scan strips them and reports findings
+    result = scan("A\u2062B\u2063C\u206Fend")
+    assert "\u2062" not in result.normalized_text
+    assert "\u2063" not in result.normalized_text
+    assert "\u206F" not in result.normalized_text
+
+
 def test_benign_japanese_mixed_scripts_are_not_flagged() -> None:
     result = scan("カタカナと漢字")
 
