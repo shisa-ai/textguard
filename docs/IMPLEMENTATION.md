@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning reviewed. Coding has not started yet.
+Phase 1 scaffold is the current focus. Core runtime implementation starts in Phase 2.
 
 `docs/PLAN.md` is authoritative for architecture and public surface.
 This file is the execution checklist for implementing that plan in the `textguard` repo.
@@ -29,7 +29,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 1 — Scaffold
 
-- [ ] Add `pyproject.toml`
+- [x] Add `pyproject.toml`
   - Python `>=3.11`
   - package metadata
   - console script entrypoint
@@ -37,12 +37,12 @@ Do not revert to the older ordering where detection comes before the scan/clean 
     - `yara = ["yara-python>=4.5.4"]`
     - `promptguard = ["onnxruntime>=1.24.4", "transformers>=5.5.3"]`
     - `all = ["textguard[yara,promptguard]"]`
-- [ ] Add `src/textguard/`
-- [ ] Add `tests/`
-- [ ] Add `scripts/` stubs for generated-data tooling docs and implementation
-- [ ] Add `src/textguard/__init__.py`
-- [ ] Add `src/textguard/types.py`
-- [ ] Define the public dataclasses from `docs/PLAN.md`:
+- [x] Add `src/textguard/`
+- [x] Add `tests/`
+- [x] Add `scripts/` stubs for generated-data tooling docs and implementation
+- [x] Add `src/textguard/__init__.py`
+- [x] Add `src/textguard/types.py`
+- [x] Define the public dataclasses from `docs/PLAN.md`:
   - `Finding`
   - `FindingContext`
   - `Change`
@@ -50,7 +50,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `DecodedText`
   - `ScanResult`
   - `CleanResult`
-- [ ] Re-export the intended top-level public surface from `__init__.py`:
+- [x] Re-export the intended top-level public surface from `__init__.py`:
   - `scan`
   - `clean`
   - `TextGuard`
@@ -60,11 +60,11 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `FindingContext`
   - `Change`
   - `SemanticResult`
-- [ ] Add `src/textguard/detect/__init__.py`
-- [ ] Add `src/textguard/backends/__init__.py`
-- [ ] Add `src/textguard/data/allowed_signers` (SSH ed25519 public key for model verification)
-- [ ] Add initial tests for type defaults and import surface
-- [ ] Generate and commit `uv.lock`
+- [x] Add `src/textguard/detect/__init__.py`
+- [x] Add `src/textguard/backends/__init__.py`
+- [x] Add `src/textguard/data/allowed_signers` (SSH ed25519 public key for model verification)
+- [x] Add initial tests for type defaults and import surface
+- [x] Generate and commit `uv.lock`
 
 ## Phase 2 — Normalize + decode
 

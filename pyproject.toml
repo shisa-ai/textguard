@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "textguard"
+version = "0.0.0"
+description = "Hostile-text normalization, inspection, and cleaning for LLM-adjacent systems."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+keywords = ["cli", "llm", "security", "text", "unicode"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+  "Topic :: Text Processing",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/shisa-ai/textguard"
+Repository = "https://github.com/shisa-ai/textguard"
+Issues = "https://github.com/shisa-ai/textguard/issues"
+Changelog = "https://github.com/shisa-ai/textguard/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+yara = ["yara-python>=4.5.4"]
+promptguard = ["onnxruntime>=1.24.4", "transformers>=5.5.3"]
+all = ["textguard[yara,promptguard]"]
+
+[project.scripts]
+textguard = "textguard.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/textguard"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/textguard/data/allowed_signers" = "textguard/data/allowed_signers"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/textguard",
+  "/tests",
+  "/scripts",
+  "/docs",
+  "/README.md",
+  "/LICENSE",
+  "/CHANGELOG.md",
+  "/WORKLOG.md",
+  "/pyproject.toml",
+  "/.python-version",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[dependency-groups]
+dev = [
+  "build>=1.4,<2",
+  "mypy>=1.18,<2",
+  "pytest>=8.4,<9",
+  "ruff>=0.12,<1",
+  "twine>=6.2,<7",
+]

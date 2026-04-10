@@ -2,7 +2,7 @@
 
 ## Status
 
-Planning only. No runtime code yet.
+Phase 1 scaffold is present. Core runtime behavior is not implemented yet.
 
 For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
 

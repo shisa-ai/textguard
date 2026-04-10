@@ -143,3 +143,17 @@ Also decided shisad consumption model: bare `textguard` and `textguard[yara]` go
 4. **`include_context` separation clarified.** Added inline comment in the top-level `scan()` signature explaining why `include_context` is kept separate from `**kwargs` — it's per-call output control, not instance config passed to the `TextGuard` constructor.
 **Rationale**: These were the only gaps found across all six docs. Fixing them before scaffold prevents the coder from having to guess at API design decisions or ask questions that the plan should already answer.
 **Open questions**: None. Docs are ready for Phase 1.
+
+### 2026-04-10 — Phase 1 scaffold landed
+
+**Context**: Before starting runtime implementation, the repo needed the baseline package, tooling, and CI scaffold described in `docs/DEV.md`, `docs/PLAN.md`, and `docs/IMPLEMENTATION.md`. At the time of review the repo still contained docs only and had not yet bootstrapped the actual package layout.
+**Decision/Change**: Added the initial Phase 1 scaffold: `pyproject.toml` with pinned hatchling, Python `>=3.11`, user-facing optional extras, and a `dev` dependency group; `.python-version`; `.gitignore`; `src/textguard/` with public dataclasses in `types.py`, a stub top-level import surface in `__init__.py`, a placeholder `cli.py`, and package directories for `detect/`, `backends/`, and `data/allowed_signers`; `tests/` with import-surface and type-default coverage; `scripts/generate_unicode_data.py` plus `scripts/README.md`; `docs/AUDIT-supply-chain.md`; `docs/PUBLISH.md`; and lean GitHub Actions workflows for CI and trusted publishing with pinned action SHAs, dependency review, `uv sync --exclude-newer P7D --frozen`, SBOM generation, and attestations. Updated `docs/PLAN.md` and `docs/IMPLEMENTATION.md` status text to reflect that the scaffold now exists and marked the Phase 1 checklist items complete.
+**Rationale**: The scaffold decisions were already documented. Delaying the actual package and workflow skeleton any longer would keep planning docs ahead of repo reality and make Phase 2 implementation harder to validate. Landing the package layout, lockfile, tests, and workflows early establishes the constraints the rest of the work will live inside.
+**Open questions**: The API and CLI surfaces are intentionally stubbed. Phase 2 starts the first real runtime behavior.
+
+### 2026-04-10 — License baseline set to Apache-2.0
+
+**Context**: While landing the scaffold, the package metadata intentionally left the license unset until the repo owner confirmed the intended baseline. That decision came in before the scaffold was finalized.
+**Decision/Change**: Set the package license to Apache-2.0 to match `shisad`, added the Apache classifier in `pyproject.toml`, included the license file in the source distribution manifest, and added a repo-root `LICENSE` file with the Apache License 2.0 text.
+**Rationale**: License metadata should not be inferred. Once confirmed, it belongs both in package metadata and in the repository itself so source distributions and downstream consumers have a clear legal baseline.
+**Open questions**: None.
