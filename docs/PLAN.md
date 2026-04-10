@@ -166,7 +166,7 @@ Internal types (`DecodedText`) and primitives (`normalize_text`, `decode_text_la
 src/textguard/
 ├── __init__.py          # scan(), clean(), TextGuard, re-export public types
 ├── types.py             # ScanResult, CleanResult, Finding, FindingContext, Change, SemanticResult, DecodedText
-├── normalize.py         # NFC/NFKC, invisible stripping, whitespace collapse, combining cap
+├── normalize.py         # NFC/NFKC, invisible stripping, ANSI escape stripping, whitespace collapse, combining cap
 ├── decode.py            # URL/HTML/ROT13/base64/unicode-escape/hex-escape/punycode bounded layer unwinding
 ├── clean.py             # cleaning pipeline, preset application
 ├── scan.py              # scan pipeline, finding aggregation
@@ -195,7 +195,7 @@ Module naming rule: no vague catchall names. Every module name should describe w
 
 ### scan() Pipeline
 
-1. **Normalize** — NFC (or NFKC in strict/ascii presets), strip/detect invisibles, bidi, tags, variation selectors, soft hyphens, zalgo
+1. **Normalize** — NFC (or NFKC in strict/ascii presets), strip/detect invisibles, bidi, tags, variation selectors, soft hyphens, ANSI escapes, zalgo
 2. **Decode** — bounded URL/HTML entity/ROT13/base64 layer unwinding with depth and expansion limits
 3. **Detect** — run all core detectors on both raw and decoded text: invisible chars, homoglyphs/mixed-script, encoded payload analysis
 4. **Backends** (optional) — run YARA rules against raw + decoded text, run PromptGuard against **raw text** (encoding is signal for the classifier, not noise to remove)
@@ -215,8 +215,8 @@ Cleaning is scan-then-transform. The scan runs first so findings are always avai
 | Preset | Normalization | Strips | Decodes |
 |--------|--------------|--------|---------|
 | **default** | NFC | Tag chars, soft hyphens, whitespace collapse, combining mark cap | No |
-| **strict** | NFKC | All invisibles, bidi, variation selectors, tag chars, soft hyphens | URL, HTML, ROT13 |
-| **ascii** | NFKC + ASCII transliteration | Everything non-ASCII | All layers |
+| **strict** | NFKC | All invisibles, bidi, variation selectors, tag chars, soft hyphens | All seven layers |
+| **ascii** | NFKC + ASCII transliteration | Everything non-ASCII | All seven layers |
 
 **NFC is the default, not NFKC.** NFKC destroys semantic content in Japanese (fullwidth katakana, certain kana forms) and other scripts. The default preset must be safe for multilingual text. NFKC is opt-in via strict and ascii presets.
 

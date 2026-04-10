@@ -57,8 +57,12 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `ScanResult`
   - `CleanResult`
   - `Finding`
+  - `FindingContext`
   - `Change`
   - `SemanticResult`
+- [ ] Add `src/textguard/detect/__init__.py`
+- [ ] Add `src/textguard/backends/__init__.py`
+- [ ] Add `src/textguard/data/allowed_signers` (SSH ed25519 public key for model verification)
 - [ ] Add initial tests for type defaults and import surface
 - [ ] Generate and commit `uv.lock`
 
@@ -74,6 +78,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - variation selector handling
   - tag character handling
   - combining-mark cap / zalgo handling
+  - ANSI escape sequence stripping
 - [ ] Implement `src/textguard/decode.py`
   - URL decoding
   - HTML entity decoding
@@ -184,8 +189,8 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - combining abuse
 - [ ] Implement `src/textguard/detect/homoglyphs.py`
   - mixed-script detection
-  - trimmed confusables path
-  - full confusables opt-in path
+  - trimmed confusables path (default)
+  - full confusables opt-in path (e.g., `TextGuard(confusables="full")` or config option)
 - [ ] Implement `src/textguard/detect/encoded.py`
   - encoded payload analysis
   - split-token detection as opt-in
@@ -205,9 +210,11 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--json`
   - `--preset`
   - `--include-context`
-  - backend flags:
-    - `--yara-rules`
-    - `--promptguard`
+  - `--confusables` (trimmed default, full opt-in)
+  - backend flags (stub if backends not yet implemented, error with install hint):
+    - `--yara-rules DIR`
+    - `--yara-bundled`
+    - `--promptguard PATH`
 - [ ] Implement `textguard clean`
   - stdout default
   - `-i`
@@ -216,6 +223,8 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--json`
   - `--preset`
   - `--include-context`
+  - `--confusables`
+  - backend flags (same stubs as scan)
 - [ ] Implement `textguard models fetch` command surface
   - real implementation can land in Phase 7
   - CLI shape should exist by this phase if practical

@@ -76,8 +76,8 @@ Presets control how aggressive cleaning is:
 | Preset | Normalization | Strips | Decodes | Use case |
 |--------|--------------|--------|---------|----------|
 | **default** | NFC | Tag chars, soft hyphens, whitespace collapse, combining mark cap | No | Safe for all multilingual text including CJK |
-| **strict** | NFKC | All invisibles, bidi, variation selectors, tag chars, soft hyphens | URL, HTML, ROT13 | Skill files, prompts, contexts where hidden content is suspect |
-| **ascii** | NFKC + ASCII transliteration | Everything non-ASCII | All layers | When you explicitly want ASCII-only output |
+| **strict** | NFKC | All invisibles, bidi, variation selectors, tag chars, soft hyphens | All seven layers | Skill files, prompts, contexts where hidden content is suspect |
+| **ascii** | NFKC + ASCII transliteration | Everything non-ASCII | All seven layers | When you explicitly want ASCII-only output |
 
 The default preset preserves legitimate multilingual text. NFKC is not the default because it destroys semantic content in Japanese and other scripts. Strict and ascii presets opt into progressively more aggressive cleaning.
 
