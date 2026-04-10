@@ -106,7 +106,7 @@ textguard scan --yara-rules ./rules/ SKILL.md
 textguard scan --promptguard ~/.local/share/textguard/models/promptguard2/ SKILL.md
 ```
 
-Exit codes from `scan` reflect whether findings were detected, so it works in CI pipelines and scripts.
+Exit codes from `scan` reflect the maximum finding severity (`0` none, `1` info, `2` warn, `3` error). Runtime failures (misconfigured backends, missing models, etc.) return `4`.
 
 ## Model Management
 

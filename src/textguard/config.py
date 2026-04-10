@@ -89,7 +89,14 @@ class TextGuardConfig:
 
 
 def config_file_path() -> Path:
-    return Path.home() / ".config" / "textguard" / "config.toml"
+    return xdg_config_home() / "textguard" / "config.toml"
+
+
+def xdg_config_home() -> Path:
+    raw = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    if raw:
+        return Path(raw).expanduser()
+    return Path.home() / ".config"
 
 
 def resolve_config(overrides: dict[str, object] | None = None) -> TextGuardConfig:

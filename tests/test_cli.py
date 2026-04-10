@@ -106,6 +106,21 @@ def test_scan_exit_codes_reflect_max_finding_severity(
     assert cli.main(["scan", str(error_path)]) == 3
 
 
+def test_scan_runtime_failure_exit_code_is_distinct_from_warn(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    missing_model = tmp_path / "missing-model-pack"
+    monkeypatch.setattr("sys.stdin", io.StringIO("plain text"))
+
+    exit_code = cli.main(["scan", "-", "--promptguard", str(missing_model)])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert captured.err
+
+
 def test_scan_promptguard_flag_passes_model_path_through(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -131,6 +146,33 @@ def test_scan_promptguard_flag_passes_model_path_through(
     assert exit_code == 0
     assert "SEMANTIC CRITICAL promptguard-v2" in captured.out
     assert observed_paths == [Path("/tmp/model-pack")]
+
+
+def test_cli_honors_config_file_when_preset_flag_is_omitted(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    config_root = tmp_path / "xdg"
+    config_dir = config_root / "textguard"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.toml").write_text('preset = "strict"\n', encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_root))
+    monkeypatch.delenv("TEXTGUARD_PRESET", raising=False)
+    monkeypatch.delenv("TEXTGUARD_CONFUSABLES", raising=False)
+    monkeypatch.delenv("TEXTGUARD_YARA_RULES_DIR", raising=False)
+    monkeypatch.delenv("TEXTGUARD_PROMPTGUARD_MODEL", raising=False)
+    monkeypatch.setattr("sys.stdin", io.StringIO("\uFF21\u200b B \u00ad"))
+
+    exit_code = cli.main(["clean", "-", "--json"])
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert exit_code == 0
+    assert payload["result"]["text"] == "A B"
 
 
 def test_models_fetch_command_surface_installs_model(

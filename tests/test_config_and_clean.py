@@ -35,6 +35,25 @@ def test_config_precedence_is_kwargs_then_env_then_file_then_defaults(
     assert overridden._config.confusables == "trimmed"
 
 
+def test_config_file_path_honors_xdg_config_home(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    xdg_root = tmp_path / "xdg"
+    config_dir = xdg_root / "textguard"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.toml").write_text('preset = "strict"\n', encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home_dir))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_root))
+    monkeypatch.delenv("TEXTGUARD_PRESET", raising=False)
+
+    guard = TextGuard()
+
+    assert guard._config.preset == "strict"
+
+
 def test_preset_semantics_default_strict_and_ascii() -> None:
     raw = "\uFF21\u200b B \u00ad"
 

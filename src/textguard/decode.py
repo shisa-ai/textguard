@@ -10,6 +10,7 @@ from urllib.parse import unquote
 from .types import DecodedText, Finding
 
 _BASE64_RE = re.compile(r"[A-Za-z0-9+/=\s]{24,}")
+_BASE64_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/]{24,}={0,2}\b")
 _UNICODE_ESCAPE_RE = re.compile(r"\\u([0-9a-fA-F]{4})|\\U([0-9a-fA-F]{8})")
 _HEX_ESCAPE_RE = re.compile(r"\\x([0-9a-fA-F]{2})")
 _PUNYCODE_LABEL_RE = re.compile(r"\bxn--[a-z0-9-]+\b", re.IGNORECASE)
@@ -198,18 +199,59 @@ def _rot13_decode_candidate(text: str) -> str | None:
 
 
 def _base64_decode_candidate(text: str) -> str | None:
-    compact = re.sub(r"\s+", "", text)
-    if len(compact) < 24 or not _BASE64_RE.fullmatch(text):
-        return None
-    padding = "=" * ((4 - (len(compact) % 4)) % 4)
     try:
-        decoded = base64.b64decode(compact + padding, validate=True)
-        candidate = decoded.decode("utf-8")
+        candidate = _base64_decode_string(text, allow_whitespace=True)
     except (ValueError, binascii.Error, UnicodeDecodeError):
+        candidate = None
+
+    if candidate is not None:
+        if candidate == text or not _looks_like_text(candidate):
+            return None
+        return candidate
+
+    return _base64_decode_inline_candidate(text)
+
+
+def _base64_decode_inline_candidate(text: str) -> str | None:
+    matches = list(_BASE64_TOKEN_RE.finditer(text))
+    if not matches:
         return None
-    if candidate == text or not _looks_like_text(candidate):
+
+    pieces: list[str] = []
+    cursor = 0
+    changed = False
+    for match in matches:
+        pieces.append(text[cursor : match.start()])
+        token = match.group(0)
+        try:
+            decoded = _base64_decode_string(token, allow_whitespace=False)
+        except (ValueError, binascii.Error, UnicodeDecodeError):
+            decoded = None
+        if decoded is not None and decoded != token and _looks_like_text(decoded):
+            pieces.append(decoded)
+            changed = True
+        else:
+            pieces.append(token)
+        cursor = match.end()
+    pieces.append(text[cursor:])
+    if not changed:
         return None
-    return candidate
+    return "".join(pieces)
+
+
+def _base64_decode_string(text: str, *, allow_whitespace: bool) -> str | None:
+    compact = re.sub(r"\s+", "", text) if allow_whitespace else text
+    if len(compact) < 24:
+        return None
+    if allow_whitespace:
+        if not _BASE64_RE.fullmatch(text):
+            return None
+    else:
+        if not _BASE64_TOKEN_RE.fullmatch(text):
+            return None
+    padding = "=" * ((4 - (len(compact) % 4)) % 4)
+    decoded = base64.b64decode(compact + padding, validate=True)
+    return decoded.decode("utf-8")
 
 
 def _unicode_escape_decode_candidate(text: str) -> str | None:

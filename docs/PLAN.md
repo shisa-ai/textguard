@@ -127,7 +127,7 @@ Constructor kwargs (`preset`, `confusables`, `yara_rules_dir`, `promptguard_mode
 
 ### Configuration
 
-`TextGuard` reads config from XDG-compliant paths (`~/.config/textguard/config.toml`), manually implemented without `platformdirs`. Config file parsed with stdlib `tomllib` (Python 3.11+).
+`TextGuard` reads config from XDG-compliant paths (`$XDG_CONFIG_HOME/textguard/config.toml`, defaulting to `~/.config/textguard/config.toml`), manually implemented without `platformdirs`. Config file parsed with stdlib `tomllib` (Python 3.11+).
 
 Precedence (highest to lowest):
 1. Constructor kwargs

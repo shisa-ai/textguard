@@ -20,6 +20,7 @@ _SCAN_EXIT_CODES = {
     "warn": 2,
     "error": 3,
 }
+_EXIT_CODE_RUNTIME_ERROR = 4
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -100,8 +101,11 @@ def _add_common_scan_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--preset",
         choices=tuple(PRESETS),
-        default="default",
-        help="Cleaning preset to use for normalization and clean behavior.",
+        default=None,
+        help=(
+            "Cleaning preset to use for normalization and clean behavior. "
+            "If omitted, uses config/env/default resolution."
+        ),
     )
     parser.add_argument(
         "--include-context",
@@ -111,8 +115,11 @@ def _add_common_scan_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--confusables",
         choices=("trimmed", "full"),
-        default="trimmed",
-        help="Confusable table scope: 'trimmed' by default or 'full' for broader coverage.",
+        default=None,
+        help=(
+            "Confusable table scope: 'trimmed' or 'full'. "
+            "If omitted, uses config/env/default resolution."
+        ),
     )
     parser.add_argument(
         "--yara-rules",
@@ -122,6 +129,7 @@ def _add_common_scan_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--yara-bundled",
         action="store_true",
+        default=None,
         help="Enable the bundled YARA ruleset.",
     )
     parser.add_argument(
@@ -161,7 +169,7 @@ def _handle_scan(args: argparse.Namespace) -> int:
         ]
     except RuntimeError as exc:
         _print_error(str(exc))
-        return 2
+        return _EXIT_CODE_RUNTIME_ERROR
 
     if args.json:
         serialized = [
@@ -199,7 +207,7 @@ def _handle_clean(args: argparse.Namespace) -> int:
         )
     except RuntimeError as exc:
         _print_error(str(exc))
-        return 2
+        return _EXIT_CODE_RUNTIME_ERROR
 
     if args.in_place:
         Path(args.path).write_text(result.text, encoding="utf-8")
