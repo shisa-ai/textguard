@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from .backends import PromptGuardBackend, YaraBackend
+from .backends import PromptGuardBackend as _PromptGuardBackend
+from .backends import YaraBackend as _YaraBackend
 from .backends import load_promptguard_backend as _load_promptguard_backend
 from .backends import load_yara_backend as _load_yara_backend
 from .backends import scores_to_semantic_result as _scores_to_semantic_result
@@ -20,9 +21,9 @@ class TextGuard:
 
     def __init__(self, **kwargs: object) -> None:
         self._config = _resolve_config(dict(kwargs))
-        self._yara_backend: YaraBackend | None = None
+        self._yara_backend: _YaraBackend | None = None
         self._yara_backend_loaded = False
-        self._promptguard_backend: PromptGuardBackend | None = None
+        self._promptguard_backend: _PromptGuardBackend | None = None
         self._promptguard_backend_loaded = False
 
     def scan(self, text: str, *, include_context: bool = False) -> ScanResult:
@@ -83,17 +84,17 @@ class TextGuard:
         decoded = _decode_text_layers(normalized_text)
         return backend.match(text, decoded_text=decoded.text)
 
-    def _maybe_yara_backend(self) -> YaraBackend | None:
+    def _maybe_yara_backend(self) -> _YaraBackend | None:
         if not (self._config.yara_bundled or self._config.yara_rules_dir is not None):
             return None
         return self._require_yara_backend()
 
-    def _maybe_promptguard_backend(self) -> PromptGuardBackend | None:
+    def _maybe_promptguard_backend(self) -> _PromptGuardBackend | None:
         if self._config.promptguard_model_path is None:
             return None
         return self._require_promptguard_backend()
 
-    def _require_yara_backend(self) -> YaraBackend:
+    def _require_yara_backend(self) -> _YaraBackend:
         if self._yara_backend_loaded:
             if self._yara_backend is None:
                 raise RuntimeError("YARA backend is not available for this TextGuard instance.")
@@ -107,7 +108,7 @@ class TextGuard:
         self._yara_backend_loaded = True
         return self._yara_backend
 
-    def _require_promptguard_backend(self) -> PromptGuardBackend:
+    def _require_promptguard_backend(self) -> _PromptGuardBackend:
         if self._config.promptguard_model_path is None:
             raise RuntimeError("PromptGuard backend is not enabled for this TextGuard instance.")
         if self._promptguard_backend_loaded:

@@ -213,3 +213,10 @@ Also decided shisad consumption model: bare `textguard` and `textguard[yara]` go
 **Decision/Change**: Bounded the split-token separator run length to five characters per gap so the opt-in detector no longer compiles a regex with effectively unbounded separators between every character. Added a decode regression test that forces `max_total_chars` to trip and verifies `encoding:decode_bound_hit` is emitted. Added a PromptGuard fetch regression test with a signed manifest containing `../../../etc/passwd` so path traversal rejection is now covered explicitly. Tightened the top-level package surface by switching internal imports in `src/textguard/__init__.py` to private aliases and added an import-surface test that asserts helper primitives and backend loaders are not bound on the top-level `textguard` module.
 **Rationale**: These were small but real correctness and surface-area issues. The regex change removes avoidable backtracking risk for users who enable split-token detection, the two new tests pin down security-sensitive bounds checks that were present but untested, and the top-level import cleanup brings the actual package surface back in line with the documented API contract.
 **Open questions**: None.
+
+### 2026-04-11 — Top-level API surface: hide backend protocol types
+
+**Context**: The plan’s top-level API surface is intentionally small (`scan`, `clean`, `TextGuard`, and result dataclasses). `src/textguard/__init__.py` still bound `PromptGuardBackend` and `YaraBackend` at the top level, making them importable via `from textguard import …` even though they are backend-internal types.
+**Decision/Change**: Switched the backend protocol imports to private aliases (`_PromptGuardBackend`, `_YaraBackend`) and extended the import-surface regression test to assert the public module does not expose the backend protocol types.
+**Rationale**: Keeping backend protocols off the top-level namespace prevents accidental API expansion and keeps the package surface aligned with `docs/PLAN.md` without impacting internal typing or backend behavior.
+**Open questions**: None.

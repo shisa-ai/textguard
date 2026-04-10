@@ -18,6 +18,8 @@ def test_top_level_import_surface_exposes_only_public_api() -> None:
     for hidden in (
         "clean_text",
         "decode_text_layers",
+        "PromptGuardBackend",
+        "YaraBackend",
         "load_promptguard_backend",
         "load_yara_backend",
         "normalize_text",
