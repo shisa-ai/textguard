@@ -17,6 +17,9 @@ _SPLIT_TOKEN_WORDS: Final[tuple[str, ...]] = (
     "prompt",
     "system",
 )
+_SORTED_SPLIT_TOKEN_WORDS: Final[tuple[str, ...]] = tuple(
+    sorted(_SPLIT_TOKEN_WORDS, key=len, reverse=True)
+)
 _SPLIT_TOKEN_SEPARATOR_MAX: Final = 5
 _SIGNAL_TOKENS: Final[tuple[str, ...]] = (
     "curl",
@@ -76,9 +79,14 @@ def _detect_base64_payloads(text: str, *, in_decoded_text: bool) -> list[Finding
 
 def _detect_split_tokens(text: str, *, in_decoded_text: bool) -> list[Finding]:
     findings: list[Finding] = []
-    for word in _SPLIT_TOKEN_WORDS:
+    matched_spans: list[tuple[int, int]] = []
+    for word in _SORTED_SPLIT_TOKEN_WORDS:
         pattern = _split_token_pattern(word)
         for match in pattern.finditer(text):
+            span = match.span()
+            if any(_spans_overlap(span, existing) for existing in matched_spans):
+                continue
+            matched_spans.append(span)
             detail = f"Split-token pattern matched protected keyword '{word}'"
             if in_decoded_text:
                 detail = f"{detail} in decoded text"
@@ -91,6 +99,10 @@ def _detect_split_tokens(text: str, *, in_decoded_text: bool) -> list[Finding]:
                 )
             )
     return findings
+
+
+def _spans_overlap(left: tuple[int, int], right: tuple[int, int]) -> bool:
+    return left[0] < right[1] and right[0] < left[1]
 
 
 def _split_token_pattern(word: str) -> re.Pattern[str]:

@@ -351,7 +351,7 @@ Output behavior:
 - `--include-context` adds original text excerpts to findings (opt-in, not LLM-safe)
 - `--split-tokens` / `--no-split-tokens` toggle opt-in split-token smuggling detection
 - `--yara-bundled` / `--no-yara-bundled` explicitly enable or disable bundled YARA rules
-- `scan` exit codes reflect the maximum of structural finding severity and semantic tier for CI use (`0` none, `1` info/medium, `2` warn/high, `3` error/critical)
+- `scan` exit codes reflect the maximum of structural finding severity and semantic tier for CI use (`0` none, `1` info/medium, `2` warn/high, `3` error/critical); runtime failures return `4`
 
 Built on stdlib `argparse`. No `click` dependency.
 
