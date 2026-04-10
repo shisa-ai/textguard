@@ -68,7 +68,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 2 — Normalize + decode
 
-- [ ] Implement `src/textguard/normalize.py`
+- [x] Implement `src/textguard/normalize.py`
   - NFC default path
   - NFKC support for strict/ascii presets
   - whitespace collapse
@@ -79,7 +79,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - tag character handling
   - combining-mark cap / zalgo handling
   - ANSI escape sequence stripping
-- [ ] Implement `src/textguard/decode.py`
+- [x] Implement `src/textguard/decode.py`
   - URL decoding
   - HTML entity decoding
   - ROT13 decoding (signal-token gated)
@@ -87,9 +87,9 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - Unicode escape decoding
   - hex escape decoding
   - punycode decoding
-- [ ] Ensure `normalize.py` and `decode.py` can emit `Finding` objects as they work
+- [x] Ensure `normalize.py` and `decode.py` can emit `Finding` objects as they work
   - detect-as-side-effect for normalization/decode stages
-- [ ] Implement the bounded decode loop
+- [x] Implement the bounded decode loop
   - layer order per pass:
     - URL
     - HTML
@@ -102,7 +102,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
     - `max_depth`
     - `max_expansion_ratio`
     - `max_total_chars`
-- [ ] Emit decode findings / reason codes for:
+- [x] Emit decode findings / reason codes for:
   - `encoding:url_decoded`
   - `encoding:html_entity_decoded`
   - `encoding:rot13_decoded`
@@ -112,10 +112,10 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `encoding:punycode_decoded`
   - `encoding:decode_depth_limited`
   - `encoding:decode_bound_hit`
-- [ ] Keep PromptGuard input assumptions out of this phase
+- [x] Keep PromptGuard input assumptions out of this phase
   - decode exists for structural analysis and YARA support
   - PromptGuard later consumes raw text only
-- [ ] Add tests for:
+- [x] Add tests for:
   - benign multilingual text, including Japanese, Arabic, and Persian
   - adversarial Unicode
   - decode-depth limiting
