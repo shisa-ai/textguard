@@ -18,11 +18,10 @@ You should receive an initial response within 7 days. Fixes for confirmed vulner
 
 ## Scope
 
-Reports are welcome for issues in:
+Use private reporting for issues where public disclosure before a fix creates real risk:
 
-- Unicode normalization, detection, or stripping bypasses
-- Decode pipeline bounds violations or evasion
-- YARA rule gaps that allow known attack patterns through
-- PromptGuard model verification or fetch integrity issues
-- Findings that leak original text content (injection vector)
-- Dependency-related vulnerabilities in optional extras
+- Supply chain compromise (tampered model packs, signature verification bypass, dependency confusion)
+- Exploitable bugs (unbounded resource consumption, code execution via crafted input)
+- Findings that echo original text content into LLM contexts (secondary injection vector)
+
+Detection gaps (a Unicode trick that slips through, a YARA rule that misses a pattern) are bugs, not security vulnerabilities. File those as regular [GitHub issues](https://github.com/shisa-ai/textguard/issues).
