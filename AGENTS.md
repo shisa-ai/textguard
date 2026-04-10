@@ -8,6 +8,8 @@ Instruction precedence: if this file conflicts with platform, system, or develop
 
 - `README.md` is the public package overview and usage surface.
 - `docs/PLAN.md` is the working implementation plan.
+- `WORKLOG.md` is the chronological development log. Append entries when making design decisions, completing work, or changing direction. Do not rewrite earlier entries — the line-number stability matters for referencing.
+- `CHANGELOG.md` is the user-facing release history, reverse chronological. Update only when shipping a release or pre-release milestone.
 - Use `shisad` as a reference source for reusable text-defense logic, not as an architecture template.
 
 ## First Principles
@@ -52,6 +54,11 @@ If the repo is still sparse, create only the files required for the current task
 - Write tests before or alongside implementation. For security-sensitive logic, tests are part of the spec.
 - Keep changes small and composable. Extract reusable primitives before adding wrappers or CLI surfaces.
 - When behavior changes, update the public docs in the same change.
+- Append to `WORKLOG.md` when completing work, making design decisions, or changing direction. Never rewrite or reorder existing entries.
+- Commit on task completion. A task is a complete logical unit, not every file edit.
+- This commit-on-completion rule applies to docs, planning, and repo-setup work too, not just code.
+- Do not wait to be asked to commit once the logical unit is complete.
+- Prefer smaller finished commits over large batches to reduce churn and loss of context.
 
 ## Security-Specific Rules
 
@@ -93,6 +100,8 @@ If a needed check cannot be run, say so explicitly.
 ## Git
 
 - Commit completed logical units promptly after the relevant checks pass.
+- This includes docs, planning, and repo-structure changes, not just runtime code.
+- Commit without being asked when the logical unit is complete.
 - Never use `git add .`, `git add -A`, or `git commit -a`.
 - Stage only the files for the current task.
 - Review staged changes with `git diff --staged --name-only` and `git diff --staged`.
