@@ -8,7 +8,7 @@ The goal is to extract the reusable text-defense work from `shisad` into a small
 
 Work in progress.
 
-This repo currently contains planning docs and extracted design notes. The package scaffold and runtime code are not implemented yet.
+This repo currently contains planning docs only. The package scaffold and runtime code are not implemented yet.
 
 See [docs/PLAN.md](docs/PLAN.md) for the current implementation plan.
 
@@ -48,11 +48,12 @@ pip install 'textguard[promptguard]'
 
 PromptGuard should be optional, not part of the default install.
 
-The current plan is for the PromptGuard extra to include:
+The initial PromptGuard runtime extra is planned to include:
 
 - `onnxruntime`
 - `transformers`
-- `huggingface-hub`
+
+If we later add an explicit model-fetch command, that can pull in `huggingface-hub` separately.
 
 The model source is:
 
@@ -63,7 +64,6 @@ Approximate first-time PromptGuard footprint as of 2026-04-10:
 - Python wheels:
   - `onnxruntime` `1.24.4`: about `17.3 MB`
   - `transformers` `5.5.3`: about `10.2 MB`
-  - `huggingface-hub` `1.10.1`: about `0.64 MB`
   - plus transitive dependencies
 - Model pack from Hugging Face:
   - `payload/model.onnx`: about `2.5 MB`
@@ -82,15 +82,16 @@ Recommendation:
 
 Current recommendation:
 
-- Keep core normalize/decode/risk code in-house.
-- Pull focused existing libraries where they materially reduce maintenance:
-  - `regex` for Unicode script-aware matching
-  - `confusable-homoglyphs` for confusables/TR39-style checks
+- Keep the core runtime stdlib-only if possible.
+- Use stdlib `unicodedata` for normalization, category checks, and combining-mark handling.
+- Vendor generated Unicode data for:
+  - script-range lookup
+  - a trimmed confusables mapping focused on high-risk cross-script pairs
+- Prefer generated data over runtime dependencies such as `regex` or `confusable-homoglyphs`.
 - Keep heavy integrations optional:
   - `yara-python`
   - `onnxruntime`
   - `transformers`
-  - `huggingface-hub`
 
 ## Planned CLI
 
@@ -111,3 +112,8 @@ cat untrusted.txt | textguard clean -
 ```
 
 The repo does not implement these commands yet.
+
+Implementation note:
+
+- start with stdlib `argparse`
+- add `click` only if the CLI grows beyond what the stdlib path handles cleanly

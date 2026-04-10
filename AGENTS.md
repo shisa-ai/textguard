@@ -6,8 +6,8 @@ Instruction precedence: if this file conflicts with platform, system, or develop
 
 ## Current Source Of Truth
 
-- `textguard-conversation.md` is the current seed document for package scope and design intent.
-- As repo docs are added, keep `README.md` and any `docs/*.md` files aligned with the actual package behavior.
+- `README.md` is the public package overview and usage surface.
+- `docs/PLAN.md` is the working implementation plan.
 - Use `shisad` as a reference source for reusable text-defense logic, not as an architecture template.
 
 ## First Principles

@@ -112,16 +112,24 @@ Implement in-house:
 - encoded payload findings
 - risk aggregation
 
-Likely worth pulling from existing libraries:
+Recommendation:
 
-- `regex` for script-aware matching and mixed-script heuristics
-- `confusable-homoglyphs` for confusable lookups instead of maintaining our own Unicode confusables table
+- use generated Unicode tables in core instead of runtime third-party Unicode helpers
+- keep the rest of the risk pipeline in-house
+
+### 4. Generated Unicode Data
+
+Recommended approach:
+
+- keep core runtime logic on stdlib `unicodedata`
+- generate and vendor a compact script-range table from Unicode `Scripts.txt`
+- generate and vendor a compact confusables table focused on high-risk cross-script pairs
 
 Recommendation:
 
-- use `regex` in core
-- use `confusable-homoglyphs` in core
-- keep the rest of the risk pipeline in-house
+- prefer a generated `Scripts.txt` range table over `unicodedata.name()` heuristics
+- keep a small fallback name-based path only if needed for edge cases
+- record the upstream Unicode version in the generated artifact metadata
 
 ## Dependency Strategy
 
@@ -129,14 +137,14 @@ Recommendation:
 
 Recommended initial direct dependencies:
 
-- `regex==2026.4.4`
-- `confusable-homoglyphs==3.3.1`
+- none
 
 Recommendation:
 
+- keep the core runtime stdlib-only at first
 - keep the CLI on stdlib `argparse` initially
 - do not add `click` unless the CLI complexity proves it necessary
-- pin direct dependencies exactly in `pyproject.toml`
+- generate and commit the Unicode helper data used by the runtime
 - generate and commit `uv.lock`
 
 ### Optional: YARA
@@ -156,22 +164,23 @@ Recommended extra:
 
 - `onnxruntime==1.24.4`
 - `transformers==5.5.3`
-- `huggingface-hub==1.10.1`
 
 Not recommended initially:
 
+- `huggingface-hub`
 - `safetensors`
 - `sentencepiece`
 
 Reason:
 
 - the current `shisa-ai/promptguard2-onnx` pack exposes `model.onnx`, `model.onnx.data`, and `tokenizer.json`
-- there is no reason to carry additional model-format dependencies unless the tokenizer load proves they are actually needed
+- there is no reason to carry additional model-format or model-download dependencies unless they are actually needed
 
 Follow-up optimization:
 
 - start with `transformers` for bring-up speed
 - keep the backend isolated so we can later swap to a lighter `tokenizers`-only path if startup cost matters
+- add `huggingface-hub` only if we implement an explicit fetch command or managed download path
 
 ## PromptGuard Plan
 
@@ -190,7 +199,6 @@ Primary wheel downloads as of 2026-04-10:
 
 - `onnxruntime`: about `17.3 MB`
 - `transformers`: about `10.2 MB`
-- `huggingface-hub`: about `0.64 MB`
 - transitive dependencies come on top of that
 
 Recommendation:
@@ -199,6 +207,7 @@ Recommendation:
 - default behavior should use a local path or existing Hugging Face cache
 - do not silently auto-download a ~295 MB model pack in the default path
 - if we support download-on-demand, make it explicit via a subcommand, flag, or environment variable
+- if we add managed fetch support, that is the point where `huggingface-hub` should become an optional dependency
 
 Suggested interface:
 
