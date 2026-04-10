@@ -235,6 +235,7 @@ Note:
 
 - the signed-pack logic in `shisad` is useful reference material, but `textguard` should first ship a simpler optional PromptGuard backend that works with an explicit local path or Hugging Face cache
 - `shisad` should migrate to `textguard` through a compatibility adapter, not a flag day rewrite
+- `textguard` does not need to preserve `shisad`'s internal shapes verbatim; it needs to expose the primitives and result surface that let `shisad` adapt cleanly
 
 ## Delivery Phases
 
