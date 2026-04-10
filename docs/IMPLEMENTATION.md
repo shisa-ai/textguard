@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 1 scaffold is the current focus. Core runtime implementation starts in Phase 2.
+Phases 1 through 3 are complete. Core detection and generated Unicode data start in Phase 4.
 
 `docs/PLAN.md` is authoritative for architecture and public surface.
 This file is the execution checklist for implementing that plan in the `textguard` repo.
@@ -124,7 +124,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 3 — Scan + clean API
 
-- [ ] Implement `src/textguard/config.py`
+- [x] Implement `src/textguard/config.py`
   - config file path: `~/.config/textguard/config.toml`
   - stdlib `tomllib`
   - precedence:
@@ -132,19 +132,19 @@ Do not revert to the older ordering where detection comes before the scan/clean 
     - env vars
     - config file
     - defaults
-- [ ] Implement preset definitions:
+- [x] Implement preset definitions:
   - `default`
   - `strict`
   - `ascii`
-- [ ] Implement `src/textguard/scan.py`
+- [x] Implement `src/textguard/scan.py`
   - scan pipeline per `docs/PLAN.md`
   - returns `ScanResult`
-- [ ] Implement `src/textguard/clean.py`
+- [x] Implement `src/textguard/clean.py`
   - scan first
   - apply preset transformations
   - record `Change` entries
   - returns `CleanResult`
-- [ ] Implement `TextGuard`
+- [x] Implement `TextGuard`
   - holds preset/config/backend state
   - exposes:
     - `scan(...)`
@@ -152,17 +152,17 @@ Do not revert to the older ordering where detection comes before the scan/clean 
     - placeholder/backend hook surface for later:
       - `score_semantic(...)`
       - `match_yara(...)`
-- [ ] Implement top-level wrappers
+- [x] Implement top-level wrappers
   - `scan(text, *, include_context=False, **kwargs)`
   - `clean(text, *, include_context=False, **kwargs)`
   - per-call output options stay per-call, not constructor config
-- [ ] Ensure `include_context` behavior matches the type contract
+- [x] Ensure `include_context` behavior matches the type contract
   - `Finding.context: FindingContext | None`
   - no context unless explicitly requested
-- [ ] Enforce finding safety
+- [x] Enforce finding safety
   - `Finding.detail` contains only safe metadata
   - never echo raw text content in `detail`
-- [ ] Add tests for:
+- [x] Add tests for:
   - pipeline flow
   - top-level wrapper parity
   - `decoded_text` propagation

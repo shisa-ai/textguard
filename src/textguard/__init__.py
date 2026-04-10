@@ -1,27 +1,30 @@
 from __future__ import annotations
 
+from .clean import clean_text
+from .config import resolve_config
+from .scan import scan_text
 from .types import Change, CleanResult, Finding, FindingContext, ScanResult, SemanticResult
 
 __version__ = "0.0.0"
 
 
 class TextGuard:
-    """Scaffold-only API surface until the scan and clean pipeline lands."""
+    """Configured entry point for the textguard scan and clean pipelines."""
 
     def __init__(self, **kwargs: object) -> None:
-        self._config = dict(kwargs)
+        self._config = resolve_config(dict(kwargs))
 
     def scan(self, text: str, *, include_context: bool = False) -> ScanResult:
-        raise NotImplementedError("textguard.scan() is not implemented yet.")
+        return scan_text(text, config=self._config, include_context=include_context)
 
     def clean(self, text: str, *, include_context: bool = False) -> CleanResult:
-        raise NotImplementedError("textguard.clean() is not implemented yet.")
+        return clean_text(text, config=self._config, include_context=include_context)
 
     def score_semantic(self, text: str) -> SemanticResult:
-        raise NotImplementedError("PromptGuard integration is not implemented yet.")
+        raise RuntimeError("PromptGuard backend is not configured yet.")
 
     def match_yara(self, text: str) -> list[Finding]:
-        raise NotImplementedError("YARA integration is not implemented yet.")
+        raise RuntimeError("YARA backend is not configured yet.")
 
 
 def scan(text: str, *, include_context: bool = False, **kwargs: object) -> ScanResult:
