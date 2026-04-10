@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 3 are complete. Core detection and generated Unicode data start in Phase 4.
+Phases 1 through 4 are complete. CLI work starts in Phase 5.
 
 `docs/PLAN.md` is authoritative for architecture and public surface.
 This file is the execution checklist for implementing that plan in the `textguard` repo.
@@ -174,33 +174,33 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 4 — Core detection + generated Unicode data
 
-- [ ] Add `scripts/generate_unicode_data.py`
-- [ ] Add `scripts/README.md`
-- [ ] Generate and vendor:
+- [x] Add `scripts/generate_unicode_data.py`
+- [x] Add `scripts/README.md`
+- [x] Generate and vendor:
   - `src/textguard/data/scripts.json`
   - `src/textguard/data/confusables.json`
   - `src/textguard/data/confusables_full.json`
-- [ ] Include generated metadata:
+- [x] Include generated metadata:
   - Unicode version
   - source file identifiers
   - source hashes
-- [ ] Implement `src/textguard/detect/invisible.py`
+- [x] Implement `src/textguard/detect/invisible.py`
   - invisibles
   - bidi
   - tag chars
   - soft hyphens
   - variation selectors
   - combining abuse
-- [ ] Implement `src/textguard/detect/homoglyphs.py`
+- [x] Implement `src/textguard/detect/homoglyphs.py`
   - mixed-script detection
   - confusable skeleton normalization
   - trimmed confusables path (default)
   - full confusables opt-in path (e.g., `TextGuard(confusables="full")` or config option)
-- [ ] Implement `src/textguard/detect/encoded.py`
+- [x] Implement `src/textguard/detect/encoded.py`
   - encoded payload analysis
   - split-token detection as opt-in
-- [ ] Wire detectors into the existing scan pipeline
-- [ ] Add tests for:
+- [x] Wire detectors into the existing scan pipeline
+- [x] Add tests for:
   - script-range behavior
   - Latin/Cyrillic and Latin/Greek confusables
   - full-confusables opt-in path

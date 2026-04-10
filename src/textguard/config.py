@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from .normalize import DEFAULT_COMBINING_MARK_CAP
+from .detect.invisible import DEFAULT_COMBINING_MARK_CAP
 
 NormalizationForm = Literal["NFC", "NFKC"]
 PresetName = Literal["default", "strict", "ascii"]

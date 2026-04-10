@@ -42,9 +42,6 @@ textguard = "textguard.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/textguard"]
 
-[tool.hatch.build.targets.wheel.force-include]
-"src/textguard/data/allowed_signers" = "textguard/data/allowed_signers"
-
 [tool.hatch.build.targets.sdist]
 include = [
   "/src/textguard",

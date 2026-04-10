@@ -2,7 +2,7 @@
 
 ## Status
 
-Phase 1 scaffold is present. Core runtime behavior is not implemented yet.
+Phases 1 through 4 are complete. CLI and optional backends remain to be implemented.
 
 For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
 

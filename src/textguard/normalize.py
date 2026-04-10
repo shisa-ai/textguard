@@ -1,30 +1,19 @@
 from __future__ import annotations
 
-import re
 import unicodedata
 from collections.abc import Iterable
 from typing import Literal
 
+from .detect.invisible import (
+    ANSI_ESCAPE_RE,
+    BIDI_CODEPOINTS,
+    DEFAULT_COMBINING_MARK_CAP,
+    INVISIBLE_CODEPOINTS,
+    SOFT_HYPHEN,
+    TAG_CODEPOINTS,
+    VARIATION_SELECTOR_CODEPOINTS,
+)
 from .types import Finding
-
-_ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
-
-_INVISIBLE_CODEPOINTS = {
-    0x034F,  # COMBINING GRAPHEME JOINER
-    0x061C,  # ARABIC LETTER MARK
-    0x180E,  # MONGOLIAN VOWEL SEPARATOR
-    0x200B,  # ZERO WIDTH SPACE
-    0x200C,  # ZERO WIDTH NON-JOINER
-    0x200D,  # ZERO WIDTH JOINER
-    0x2060,  # WORD JOINER
-    0xFEFF,  # ZERO WIDTH NO-BREAK SPACE / BOM
-}
-_BIDI_CODEPOINTS = set(range(0x202A, 0x202F)) | set(range(0x2066, 0x206A))
-_TAG_CODEPOINTS = set(range(0xE0000, 0xE0080))
-_VARIATION_SELECTOR_CODEPOINTS = set(range(0xFE00, 0xFE10)) | set(range(0xE0100, 0xE01F0))
-_SOFT_HYPHEN = 0x00AD
-
-DEFAULT_COMBINING_MARK_CAP = 3
 
 
 def normalize_text(
@@ -57,7 +46,7 @@ def normalize_text(
     for offset, char in enumerate(stripped):
         codepoint = ord(char)
 
-        if strip_invisible and codepoint in _INVISIBLE_CODEPOINTS:
+        if strip_invisible and codepoint in INVISIBLE_CODEPOINTS:
             _append_char_finding(
                 findings,
                 kind="invisible_char",
@@ -66,7 +55,7 @@ def normalize_text(
                 offset=offset,
             )
             continue
-        if strip_bidi and codepoint in _BIDI_CODEPOINTS:
+        if strip_bidi and codepoint in BIDI_CODEPOINTS:
             _append_char_finding(
                 findings,
                 kind="bidi_control",
@@ -75,7 +64,7 @@ def normalize_text(
                 offset=offset,
             )
             continue
-        if strip_variation_selectors and codepoint in _VARIATION_SELECTOR_CODEPOINTS:
+        if strip_variation_selectors and codepoint in VARIATION_SELECTOR_CODEPOINTS:
             _append_char_finding(
                 findings,
                 kind="variation_selector",
@@ -84,7 +73,7 @@ def normalize_text(
                 offset=offset,
             )
             continue
-        if strip_tag_chars and codepoint in _TAG_CODEPOINTS:
+        if strip_tag_chars and codepoint in TAG_CODEPOINTS:
             _append_char_finding(
                 findings,
                 kind="tag_character",
@@ -93,7 +82,7 @@ def normalize_text(
                 offset=offset,
             )
             continue
-        if strip_soft_hyphens and codepoint == _SOFT_HYPHEN:
+        if strip_soft_hyphens and codepoint == SOFT_HYPHEN:
             _append_char_finding(
                 findings,
                 kind="soft_hyphen",
@@ -132,11 +121,11 @@ def strip_non_ascii(text: str) -> str:
 
 def _strip_ansi_sequences(text: str, *, findings: list[Finding] | None) -> str:
     if findings is None:
-        return _ANSI_ESCAPE_RE.sub("", text)
+        return ANSI_ESCAPE_RE.sub("", text)
 
     stripped_parts: list[str] = []
     last_end = 0
-    for match in _ANSI_ESCAPE_RE.finditer(text):
+    for match in ANSI_ESCAPE_RE.finditer(text):
         stripped_parts.append(text[last_end : match.start()])
         findings.append(
             Finding(
