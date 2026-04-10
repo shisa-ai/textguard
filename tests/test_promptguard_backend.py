@@ -4,6 +4,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -176,6 +177,52 @@ def test_promptguard_load_uses_signed_pack_payload_dir(
     assert observed_paths == [pack_dir / "payload"]
 
 
+def test_promptguard_load_uses_default_bundled_trust_store_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pack_dir = tmp_path / "promptguard-pack"
+    key_path = _generate_ssh_keypair(tmp_path, name="promptguard-pack-key")
+    data_dir = tmp_path / "textguard-data" / "data"
+    data_dir.mkdir(parents=True)
+    _write_allowed_signers(
+        data_dir / "allowed_signers",
+        principal="promptguard",
+        public_key=Path(f"{key_path}.pub"),
+    )
+    _write_signed_pack(
+        pack_dir,
+        key_path=key_path,
+        files={"payload/model.onnx": b"fake-onnx"},
+    )
+
+    observed_paths: list[Path] = []
+
+    def fake_from_local_path(
+        cls: type[promptguard_backend.OnnxPromptGuardBackend],
+        model_path: Path,
+    ) -> _FakePromptGuardBackend:
+        observed_paths.append(model_path)
+        return _FakePromptGuardBackend([0.81])
+
+    backend_module = cast(Any, promptguard_backend)
+    monkeypatch.setattr(
+        backend_module.resources,
+        "files",
+        lambda package: tmp_path / "textguard-data",
+    )
+    monkeypatch.setattr(
+        promptguard_backend.OnnxPromptGuardBackend,
+        "from_local_path",
+        classmethod(fake_from_local_path),
+    )
+
+    backend = promptguard_backend.load_promptguard_backend(pack_dir)
+
+    assert isinstance(backend, _FakePromptGuardBackend)
+    assert observed_paths == [pack_dir / "payload"]
+
+
 def test_promptguard_scoring_uses_raw_text_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -229,6 +276,38 @@ def test_clean_does_not_load_promptguard_backend(
     result = TextGuard(promptguard_model_path=model_dir).clean("plain text")
 
     assert result.text == "plain text"
+
+
+def test_promptguard_load_reports_missing_ssh_keygen(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pack_dir = tmp_path / "promptguard-pack"
+    key_path = _generate_ssh_keypair(tmp_path, name="promptguard-pack-key")
+    allowed_signers = tmp_path / "allowed_signers"
+    _write_allowed_signers(
+        allowed_signers,
+        principal="promptguard",
+        public_key=Path(f"{key_path}.pub"),
+    )
+    _write_signed_pack(
+        pack_dir,
+        key_path=key_path,
+        files={"payload/model.onnx": b"fake-onnx"},
+    )
+
+    def raise_missing(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        _ = (args, kwargs)
+        raise FileNotFoundError("ssh-keygen")
+
+    backend_module = cast(Any, promptguard_backend)
+    monkeypatch.setattr(backend_module.subprocess, "run", raise_missing)
+
+    with pytest.raises(RuntimeError, match="promptguard_pack_verifier_unavailable"):
+        promptguard_backend.load_promptguard_backend(
+            pack_dir,
+            allowed_signers_path=allowed_signers,
+        )
 
 
 def test_fetch_promptguard_model_rejects_tampered_manifest(

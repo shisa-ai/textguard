@@ -5,6 +5,7 @@ from .backends import (
     YaraBackend,
     load_promptguard_backend,
     load_yara_backend,
+    scores_to_semantic_result,
 )
 from .clean import clean_text
 from .config import resolve_config
@@ -44,7 +45,7 @@ class TextGuard:
         if include_semantic:
             promptguard_backend = self._maybe_promptguard_backend()
             if promptguard_backend is not None:
-                score, tier, classifier_id = self._semantic_from_scores(
+                score, tier, classifier_id = scores_to_semantic_result(
                     promptguard_backend.score_text(text)
                 )
                 result.semantic = SemanticResult(
@@ -65,7 +66,7 @@ class TextGuard:
 
     def score_semantic(self, text: str) -> SemanticResult:
         backend = self._require_promptguard_backend()
-        score, tier, classifier_id = self._semantic_from_scores(backend.score_text(text))
+        score, tier, classifier_id = scores_to_semantic_result(backend.score_text(text))
         return SemanticResult(score=score, tier=tier, classifier_id=classifier_id)
 
     def match_yara(self, text: str) -> list[Finding]:
@@ -124,19 +125,6 @@ class TextGuard:
         self._promptguard_backend = backend
         self._promptguard_backend_loaded = True
         return self._promptguard_backend
-
-    def _semantic_from_scores(self, scores: list[float]) -> tuple[float, str, str]:
-        score = max((float(item) for item in scores), default=0.0)
-        if score >= 0.9:
-            tier = "critical"
-        elif score >= 0.7:
-            tier = "high"
-        elif score >= 0.35:
-            tier = "medium"
-        else:
-            tier = "none"
-        return score, tier, "promptguard-v2"
-
 
 def scan(text: str, *, include_context: bool = False, **kwargs: object) -> ScanResult:
     return TextGuard(**kwargs).scan(text, include_context=include_context)

@@ -23,6 +23,10 @@ _PROMPTGUARD_INSTALL_HINT = (
     "PromptGuard backend requires the optional dependencies. "
     "Install hint: textguard[promptguard]."
 )
+_HASH_CHUNK_SIZE = 1024 * 1024
+_MAX_MANIFEST_BYTES = 1024 * 1024
+_MAX_SIGNATURE_BYTES = 64 * 1024
+_SSH_KEYGEN_TIMEOUT_SECONDS = 10
 
 
 class PromptGuardBackend(Protocol):
@@ -346,7 +350,13 @@ def inspect_promptguard_model_pack(
         )
 
     try:
-        manifest = PromptGuardModelPackManifest.from_bytes(manifest_path.read_bytes())
+        manifest = PromptGuardModelPackManifest.from_bytes(
+            _read_capped_file_bytes(
+                manifest_path,
+                max_bytes=_MAX_MANIFEST_BYTES,
+                reason="promptguard_pack_manifest_too_large",
+            )
+        )
     except (OSError, ValueError):
         return PromptGuardModelPackInspection(
             valid=False,
@@ -369,11 +379,19 @@ def inspect_promptguard_model_pack(
             manifest=manifest,
         )
 
-    verified, signer = _verify_signature(
-        manifest_path=manifest_path,
-        signature_path=signature_path,
-        allowed_signers_path=allowed_signers_path,
-    )
+    try:
+        verified, signer = _verify_signature(
+            manifest_path=manifest_path,
+            signature_path=signature_path,
+            allowed_signers_path=allowed_signers_path,
+        )
+    except RuntimeError as exc:
+        return PromptGuardModelPackInspection(
+            valid=False,
+            reason=str(exc),
+            pack_dir=pack_dir,
+            manifest=manifest,
+        )
     if not verified:
         return PromptGuardModelPackInspection(
             valid=False,
@@ -431,8 +449,8 @@ def fetch_promptguard_model(
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    manifest_bytes = _download_bytes(spec.manifest_url)
-    signature_bytes = _download_bytes(spec.signature_url)
+    manifest_bytes = _download_bytes(spec.manifest_url, max_bytes=_MAX_MANIFEST_BYTES)
+    signature_bytes = _download_bytes(spec.signature_url, max_bytes=_MAX_SIGNATURE_BYTES)
 
     with tempfile.TemporaryDirectory(dir=destination.parent, prefix=f".{model_name}-") as temp_dir:
         staging_root = Path(temp_dir) / "pack"
@@ -443,11 +461,16 @@ def fetch_promptguard_model(
         signature_path.write_bytes(signature_bytes)
 
         with _resolved_allowed_signers_path(allowed_signers_path) as allowed_path:
-            verified, _signer = _verify_signature(
-                manifest_path=manifest_path,
-                signature_path=signature_path,
-                allowed_signers_path=allowed_path,
-            )
+            try:
+                verified, _signer = _verify_signature(
+                    manifest_path=manifest_path,
+                    signature_path=signature_path,
+                    allowed_signers_path=allowed_path,
+                )
+            except RuntimeError as exc:
+                raise RuntimeError(
+                    f"PromptGuard model pack verification failed: {exc}"
+                ) from exc
             if not verified:
                 raise RuntimeError(
                     "PromptGuard model pack verification failed: "
@@ -621,20 +644,38 @@ def _validate_manifest_files(
 
     for relative, record in declared.items():
         actual_path = actual[relative]
-        data = actual_path.read_bytes()
-        if hashlib.sha256(data).hexdigest() != record.sha256:
-            return False, "promptguard_pack_file_hash_mismatch"
-        if len(data) != record.size:
+        if actual_path.stat().st_size != record.size:
             return False, "promptguard_pack_file_size_mismatch"
+        if _hash_file(actual_path) != record.sha256:
+            return False, "promptguard_pack_file_hash_mismatch"
     return True, "ok"
 
 
-def _download_bytes(url: str) -> bytes:
+def _download_bytes(url: str, *, max_bytes: int) -> bytes:
+    payload = bytearray()
+    total = 0
     try:
         with urlopen(url, timeout=120) as response:
-            return cast(bytes, response.read())
+            while True:
+                remaining = max_bytes - total + 1
+                if remaining <= 0:
+                    raise RuntimeError(
+                        "PromptGuard download failed for "
+                        f"{url}: response exceeded {max_bytes} bytes"
+                    )
+                chunk = response.read(min(_HASH_CHUNK_SIZE, remaining))
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise RuntimeError(
+                        "PromptGuard download failed for "
+                        f"{url}: response exceeded {max_bytes} bytes"
+                    )
+                payload.extend(chunk)
     except OSError as exc:
         raise RuntimeError(f"PromptGuard download failed for {url}: {exc}") from exc
+    return bytes(payload)
 
 
 def _download_file(
@@ -650,10 +691,21 @@ def _download_file(
     try:
         with urlopen(url, timeout=120) as response, destination.open("wb") as handle:
             while True:
-                chunk = response.read(1024 * 1024)
+                remaining = expected_size - total + 1
+                if remaining <= 0:
+                    raise RuntimeError(
+                        "PromptGuard model pack verification failed: "
+                        "promptguard_pack_file_size_mismatch"
+                    )
+                chunk = response.read(min(_HASH_CHUNK_SIZE, remaining))
                 if not chunk:
                     break
                 total += len(chunk)
+                if total > expected_size:
+                    raise RuntimeError(
+                        "PromptGuard model pack verification failed: "
+                        "promptguard_pack_file_size_mismatch"
+                    )
                 hasher.update(chunk)
                 handle.write(chunk)
     except OSError as exc:
@@ -688,27 +740,46 @@ def _verify_signature(
     principals = _allowed_signer_principals(allowed_signers_path)
     if not principals:
         return False, ""
-    manifest_text = manifest_path.read_text(encoding="utf-8")
+    try:
+        manifest_text = _read_capped_file_bytes(
+            manifest_path,
+            max_bytes=_MAX_MANIFEST_BYTES,
+            reason="promptguard_pack_manifest_too_large",
+        ).decode("utf-8")
+    except OSError as exc:
+        raise RuntimeError("promptguard_pack_manifest_unreadable") from exc
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("promptguard_pack_invalid_manifest") from exc
     for principal in principals:
-        result = subprocess.run(
-            [
-                "ssh-keygen",
-                "-Y",
-                "verify",
-                "-f",
-                str(allowed_signers_path),
-                "-I",
-                principal,
-                "-n",
-                "file",
-                "-s",
-                str(signature_path),
-            ],
-            input=manifest_text,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                [
+                    "ssh-keygen",
+                    "-Y",
+                    "verify",
+                    "-f",
+                    str(allowed_signers_path),
+                    "-I",
+                    principal,
+                    "-n",
+                    "file",
+                    "-s",
+                    str(signature_path),
+                ],
+                input=manifest_text,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=_SSH_KEYGEN_TIMEOUT_SECONDS,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError("promptguard_pack_verifier_unavailable") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("promptguard_pack_verifier_timeout") from exc
+        except OSError as exc:
+            raise RuntimeError("promptguard_pack_verifier_unavailable") from exc
         if result.returncode == 0:
             return True, principal
     return False, ""
@@ -719,6 +790,35 @@ def _resolved_allowed_signers_path(override: Path | None) -> Iterator[Path]:
     if override is not None:
         yield override.expanduser()
         return
-    resource = resources.files("textguard.data").joinpath("allowed_signers")
+    resource = resources.files("textguard").joinpath("data").joinpath("allowed_signers")
     with resources.as_file(resource) as resource_path:
         yield resource_path
+
+
+def _read_capped_file_bytes(path: Path, *, max_bytes: int, reason: str) -> bytes:
+    total = 0
+    payload = bytearray()
+    with path.open("rb") as handle:
+        while True:
+            remaining = max_bytes - total + 1
+            if remaining <= 0:
+                raise ValueError(reason)
+            chunk = handle.read(min(_HASH_CHUNK_SIZE, remaining))
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(reason)
+            payload.extend(chunk)
+    return bytes(payload)
+
+
+def _hash_file(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(_HASH_CHUNK_SIZE)
+            if not chunk:
+                break
+            hasher.update(chunk)
+    return hasher.hexdigest()

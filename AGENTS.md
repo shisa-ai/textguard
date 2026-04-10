@@ -101,6 +101,8 @@ If a needed check cannot be run, say so explicitly.
 - Commit completed logical units promptly after the relevant checks pass.
 - This includes docs, planning, and repo-structure changes, not just runtime code.
 - Commit without being asked when the logical unit is complete.
+- Write commit messages with a conventional-prefix subject line plus a short body when the change is non-trivial.
+- The commit body should give a high-level overview of the fix in flat bullets, roughly one bullet per major change area.
 - Never use `git add .`, `git add -A`, or `git commit -a`.
 - Stage only the files for the current task.
 - Review staged changes with `git diff --staged --name-only` and `git diff --staged`.
