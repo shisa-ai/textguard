@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 5 are complete. Optional YARA and PromptGuard backends remain.
+Phases 1 through 6 are complete. PromptGuard backend and model fetch remain.
 
 For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
 

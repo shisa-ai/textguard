@@ -104,17 +104,17 @@ def test_scan_exit_codes_reflect_max_finding_severity(
     assert cli.main(["scan", str(error_path)]) == 3
 
 
-def test_scan_backend_flags_error_with_install_hint(
+def test_scan_promptguard_flag_errors_with_install_hint(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setattr("sys.stdin", io.StringIO("plain text"))
 
-    exit_code = cli.main(["scan", "-", "--yara-bundled"])
+    exit_code = cli.main(["scan", "-", "--promptguard", "/tmp/model-pack"])
     captured = capsys.readouterr()
 
     assert exit_code == 2
-    assert "textguard[yara]" in captured.err
+    assert "textguard[promptguard]" in captured.err
 
 
 def test_models_fetch_command_surface_returns_stub_error(

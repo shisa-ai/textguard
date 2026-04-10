@@ -6,7 +6,7 @@ from .config import PRESETS, TextGuardConfig
 from .decode import decode_text_layers
 from .normalize import normalize_text, strip_non_ascii
 from .scan import scan_text
-from .types import Change, CleanResult
+from .types import Change, CleanResult, ScanResult
 
 
 def clean_text(
@@ -14,8 +14,10 @@ def clean_text(
     *,
     config: TextGuardConfig,
     include_context: bool = False,
+    scan_result: ScanResult | None = None,
 ) -> CleanResult:
-    scan_result = scan_text(text, config=config, include_context=include_context)
+    if scan_result is None:
+        scan_result = scan_text(text, config=config, include_context=include_context)
     preset = config.preset_settings
 
     cleaned = text

@@ -147,18 +147,24 @@ def _handle_scan(args: argparse.Namespace) -> int:
         return 2
 
     payloads = [_read_input(path_text) for path_text in cast(list[str], args.paths)]
-    results = [
-        (
-            label,
-            scan(
-                text,
-                include_context=args.include_context,
-                preset=args.preset,
-                confusables=args.confusables,
-            ),
-        )
-        for label, text in payloads
-    ]
+    try:
+        results = [
+            (
+                label,
+                scan(
+                    text,
+                    include_context=args.include_context,
+                    preset=args.preset,
+                    confusables=args.confusables,
+                    yara_rules_dir=args.yara_rules,
+                    yara_bundled=args.yara_bundled,
+                ),
+            )
+            for label, text in payloads
+        ]
+    except RuntimeError as exc:
+        _print_error(str(exc))
+        return 2
 
     if args.json:
         serialized = [
@@ -189,12 +195,18 @@ def _handle_clean(args: argparse.Namespace) -> int:
         return 2
 
     label, text = _read_input(cast(str, args.path))
-    result = clean(
-        text,
-        include_context=args.include_context,
-        preset=args.preset,
-        confusables=args.confusables,
-    )
+    try:
+        result = clean(
+            text,
+            include_context=args.include_context,
+            preset=args.preset,
+            confusables=args.confusables,
+            yara_rules_dir=args.yara_rules,
+            yara_bundled=args.yara_bundled,
+        )
+    except RuntimeError as exc:
+        _print_error(str(exc))
+        return 2
 
     if args.in_place:
         Path(args.path).write_text(result.text, encoding="utf-8")
@@ -219,8 +231,6 @@ def _handle_models_fetch(args: argparse.Namespace) -> int:
 
 
 def _backend_flag_error(args: argparse.Namespace) -> str | None:
-    if getattr(args, "yara_rules", None) is not None or getattr(args, "yara_bundled", False):
-        return "YARA backend is not implemented yet. Install hint: textguard[yara]."
     if getattr(args, "promptguard", None) is not None:
         return (
             "PromptGuard backend is not implemented yet. "

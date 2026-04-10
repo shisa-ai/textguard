@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 5 are complete. Optional backend work starts in Phase 6.
+Phases 1 through 6 are complete. PromptGuard backend work starts in Phase 7.
 
 `docs/PLAN.md` is authoritative for architecture and public surface.
 This file is the execution checklist for implementing that plan in the `textguard` repo.
@@ -244,18 +244,18 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 6 — YARA backend
 
-- [ ] Implement `src/textguard/backends/yara_backend.py`
-- [ ] Add bundled rules under `src/textguard/data/rules/`
-- [ ] Support bundled-rule loading behavior from the resolved plan
+- [x] Implement `src/textguard/backends/yara_backend.py`
+- [x] Add bundled rules under `src/textguard/data/rules/`
+- [x] Support bundled-rule loading behavior from the resolved plan
   - bundled rules ship with the package
   - not auto-loaded by default
   - explicit enable path via config/flag/API
-- [ ] Implement direct backend access:
+- [x] Implement direct backend access:
   - `guard.match_yara(text)`
-- [ ] Ensure YARA runs against:
+- [x] Ensure YARA runs against:
   - raw text
   - decoded text
-- [ ] Add tests for:
+- [x] Add tests for:
   - missing extra
   - bundled rules
   - custom rules

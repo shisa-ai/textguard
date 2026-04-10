@@ -45,7 +45,7 @@ def scan_text(
         )
         findings.extend(detect_encoded_payloads(decoded.text, in_decoded_text=True))
 
-    findings = _dedupe_findings(findings)
+    findings = dedupe_findings(findings)
 
     if include_context:
         findings = _attach_context(text, findings)
@@ -59,7 +59,7 @@ def scan_text(
     )
 
 
-def _dedupe_findings(findings: list[Finding]) -> list[Finding]:
+def dedupe_findings(findings: list[Finding]) -> list[Finding]:
     deduped: list[Finding] = []
     seen: set[tuple[str, str, str, str, int | None]] = set()
     for finding in findings:
