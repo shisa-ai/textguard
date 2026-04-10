@@ -111,3 +111,24 @@ Chronological development log. Append new entries at the bottom. Do not rewrite 
 **Decision/Change**: Tightened `docs/IMPLEMENTATION.md` so Phase 2 now explicitly keeps ROT13 signal-gated, requires normalize/decode finding emission, and restores Arabic/Persian test coverage alongside Japanese. Restored the missing Phase 3 pipeline-flow and config-precedence tests, added confusable skeleton normalization back to Phase 4, and made the CLI exit-code item explicitly severity-based for CI use. Updated `docs/shisad-migration.md` to reflect the resolved ownership boundary: `textguard` owns its standalone PromptGuard fetch/verify path, while `shisad` can continue passing a resolved local model path during migration. Cleaned up stale "pattern detection" wording so it points to YARA-backed rule matching instead of implying a separate core phrase engine. Updated `README.md` only where it materially drifted from the plan, while leaving the planning-only status note intact as requested. This entry also corrects the stale worklog summary of the public export surface: `FindingContext` is part of the intended top-level export set.
 **Rationale**: The plan is authoritative, but the punchlist and migration notes are operational documents. Small omissions there are enough to create implementation drift, especially around decode behavior, test obligations, and PromptGuard ownership. Updating the supporting docs keeps the repo coherent without rewriting earlier historical entries.
 **Open questions**: None introduced by this alignment pass.
+
+### 2026-04-10 — Dev environment decisions finalized from cross-repo review
+
+**Context**: Before scaffolding `pyproject.toml` and CI, reviewed five repos for dev environment patterns: `lhl/realitycheck`, `lhl/tweetxvault`, `lhl/outline-edit`, `shisa-ai/shisad`, and `shisa-ai/supply-chain-security`. Goal was to establish consistent tooling choices grounded in existing practice and org policy rather than starting from scratch.
+**Decision/Change**: Reviewed all five repos and recorded 12 decisions in `docs/DEV.md`:
+1. **hatchling==1.29.0** (pinned, matches shisad and outline-edit)
+2. **src/ layout** (matches shisad and outline-edit)
+3. **Python >=3.11** package target, **.python-version 3.12** for local dev
+4. **uv with committed lockfile** (per supply-chain-security policy)
+5. **Both `[project.optional-dependencies]` and `[dependency-groups]`** — optional-deps for user-facing extras (yara, promptguard, all), dependency-groups (PEP 735) for dev tooling
+6. **Full supply-chain-security compliance** — committed uv.lock, 7-day age gate, frozen CI installs, SHA-pinned GH Actions, OIDC trusted publishing, SBOM generation, audit doc
+7. **ruff + mypy strict** (security-sensitive code warrants it)
+8. **Simple pytest** (synchronous library, no async needed)
+9. **GitHub Actions CI from day one** — lint lane, test matrix (3.11+3.12), dependency review, tag-triggered publish with OIDC. Public repo to be created at shisa-ai/textguard, package name textguard claimed on first PyPI publish
+10. **Zero core runtime dependencies** (strongest supply-chain posture)
+11. **argparse CLI entry point** (`textguard = "textguard.cli:main"`)
+12. **Publishing**: `docs/PUBLISH.md` checklist (outline-edit pattern) + GHA publish workflow (shisad pattern)
+
+Also decided shisad consumption model: bare `textguard` and `textguard[yara]` go in shisad's core `[project.dependencies]` (zero transitive cost for bare, YARA is fundamental to the firewall). `textguard[promptguard]` goes in shisad's `security-runtime` group since PromptGuard (onnxruntime + transformers) is the only truly heavy dependency — resource-constrained environments may not run it. The `security-runtime` group may eventually be renamed to `promptguard` since textguard would absorb the YARA pin.
+**Rationale**: Anchoring decisions to existing repos and org policy avoids reinventing tooling choices. The cross-repo review surfaced a clear evolution: older repos (realitycheck, tweetxvault) use flat layout, `[tool.uv]` dev-deps, no CI; newer repos (outline-edit, shisad) use src layout, pinned hatchling, PEP 735 dependency-groups. textguard follows the newer pattern. The supply-chain-security policy makes several items non-negotiable for shisa-ai repos.
+**Open questions**: None blocking scaffold. Next step is Phase 1 implementation: pyproject.toml, src/textguard/__init__.py, types.py, tests/, uv.lock, .github/workflows/.
