@@ -66,7 +66,7 @@ class DecodedText:
 class ScanResult:
     findings: list[Finding]
     normalized_text: str
-    decoded_text: str
+    decoded_text: str              # post-decode text — shisad uses this for secret redaction and rewrite
     decode_depth: int
     decode_reason_codes: list[str]
     semantic: SemanticResult | None = None
@@ -95,6 +95,7 @@ from textguard import TextGuard
 
 guard = TextGuard(
     preset="strict",
+    confusables="full",           # "trimmed" (default) or "full" — controls confusable table scope
     yara_rules_dir="./rules/",
     promptguard_model_path="/path/to/model-pack",
 )
@@ -112,13 +113,17 @@ Top-level functions separate per-call options from constructor config:
 
 ```python
 def scan(text: str, *, include_context: bool = False, **kwargs) -> ScanResult:
+    # include_context is per-call output control, not instance config — kept separate from **kwargs
+    # which pass through to the TextGuard constructor (preset, backend paths, etc.)
     return TextGuard(**kwargs).scan(text, include_context=include_context)
 
 def clean(text: str, *, include_context: bool = False, **kwargs) -> CleanResult:
     return TextGuard(**kwargs).clean(text, include_context=include_context)
 ```
 
-Constructor kwargs (`preset`, `yara_rules_dir`, `promptguard_model_path`, etc.) configure the `TextGuard` instance. Per-call options (`include_context`) pass through to the method.
+Constructor kwargs (`preset`, `confusables`, `yara_rules_dir`, `promptguard_model_path`, etc.) configure the `TextGuard` instance. Per-call options (`include_context`) pass through to the method.
+
+`confusables` is a constructor parameter (instance config), not a per-call option — the confusable table is loaded once and reused across calls. Values: `"trimmed"` (default, Latin↔Cyrillic and Latin↔Greek) or `"full"` (all cross-script pairs, higher false-positive rate). Also settable via `TEXTGUARD_CONFUSABLES` env var, config file, or `--confusables` CLI flag.
 
 ### Configuration
 
@@ -126,7 +131,7 @@ Constructor kwargs (`preset`, `yara_rules_dir`, `promptguard_model_path`, etc.) 
 
 Precedence (highest to lowest):
 1. Constructor kwargs
-2. Environment variables (`TEXTGUARD_PRESET`, `TEXTGUARD_PROMPTGUARD_MODEL`, `TEXTGUARD_YARA_RULES_DIR`)
+2. Environment variables (`TEXTGUARD_PRESET`, `TEXTGUARD_CONFUSABLES`, `TEXTGUARD_PROMPTGUARD_MODEL`, `TEXTGUARD_YARA_RULES_DIR`)
 3. Config file (`~/.config/textguard/config.toml`)
 4. Built-in defaults
 
@@ -400,6 +405,8 @@ yara = ["yara-python>=4.5.4"]
 promptguard = ["onnxruntime>=1.24.4", "transformers>=5.5.3"]
 all = ["textguard[yara,promptguard]"]
 ```
+
+Bundled YARA rules (`data/rules/`) ship with the core package — the rule files are small data, not the YARA runtime. Installing `textguard[yara]` adds the `yara-python` engine needed to load and execute them. Users without the YARA extra can still inspect the rules or use them with an external YARA installation.
 
 CI uses `uv sync --frozen`. The lockfile is the security boundary. See `shisa-ai/supply-chain-security` for policy.
 
