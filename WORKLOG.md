@@ -69,3 +69,31 @@ Chronological development log. Append new entries at the bottom. Do not rewrite 
 **Rationale**: The original design conversation had good instincts (two verbs, composable API, optional backends) but the planning docs had drifted from that clarity. Key design gaps — what clean() does, how types relate, whether patterns.py should exist — needed explicit decisions before implementation could start cleanly. The supply-chain-security repo's Python policy resolved the version pinning question.
 
 **Open questions**: Metadata injection concern — findings/results passed to LLMs need to be safe from becoming a secondary injection vector. Need to think about how Finding.detail strings are constructed. Decode pipeline scope needs detailed design during Phase 2 (what layers, what order, how to handle split-token and mixed encoding). Confusables table trimming criteria (which cross-script pairs are "high-risk") needs definition during Phase 3.
+
+### 2026-04-10 — Implementation review: open questions resolved, phases updated
+
+**Context**: Reviewed the delivery phases and remaining open questions from the design review. Walked through 9 items to close all open questions and refine the implementation plan before handing off to the coder.
+
+**Decisions made**:
+
+1. **Finding safety: safe by default, context opt-in.** `Finding.detail` never echoes original text content — only metadata (codepoints, offsets, classification). This makes findings safe to pass to LLMs without secondary injection risk. `--include-context` / `include_context=True` adds a structurally separate `context.excerpt` block per finding for human debugging. Consumers can strip or ignore it. If excerpts need sanitizing, pipe through `textguard clean`.
+
+2. **Seven decode layers, all in core.** URL, HTML entity, ROT13 (signal-gated), base64, Unicode escapes (`\uXXXX`), hex escapes (`\xXX`), Punycode. All are fast (sub-ms), low false-positive, and common attack vectors. Each pass runs all layers in sequence (URL → HTML → ROT13 → base64 → Unicode → hex → Punycode), looping until stable or depth limit. Split-token / fragmented encoding detection is available as opt-in finding (FP risk when on by default).
+
+3. **PromptGuard receives raw text, not decoded.** This is a critical correction — the earlier PLAN said "run PromptGuard against decoded text" which was wrong. PromptGuard is a classifier trained on injection attempts. The encoding (ROT13-wrapped instructions, base64 payloads, Unicode tricks) IS adversarial signal. Decoding first removes what the classifier is trained to detect. YARA still gets both raw and decoded text — pattern matching benefits from seeing through encoding layers.
+
+4. **Confusables: trimmed default + full opt-in.** Default `confusables.json` covers Latin↔Cyrillic and Latin↔Greek (~150-200 entries). Full `confusables_full.json` covers all cross-script pairs (~1000+ entries), opt-in for exhaustive coverage. Both are generated artifacts from Unicode `confusables.txt`. The full table is useful for skill file checking where adversaries are thorough with homoglyph substitution.
+
+5. **Phase boundary: types in Phase 1, pipeline before detectors.** `types.py` with all public dataclasses moves into Phase 1 scaffold so normalize and decode can emit `Finding` objects from day one. Phase ordering changed: scaffold → normalize+decode → **scan+clean API** → detection → CLI → YARA → PromptGuard. The pipeline wires up early so every detector added later plugs into a testable flow immediately.
+
+6. **Generated Unicode data: single script, hash-verified upstream.** `scripts/generate_unicode_data.py` generates all artifacts. Fetches upstream from Unicode Consortium with a pinned version. Upstream file hashes verified against expected values (provenance tracking). Generated output includes metadata (Unicode version, timestamp, source hashes). Manual process — run generator, review diff, commit. Documented in `scripts/README.md`.
+
+7. **Bundled YARA rules in `data/rules/`.** Ships with the package. YARA backend accepts `bundled=True` to load shipped rules, a directory path for user rules, or both. Users can combine or replace defaults entirely.
+
+8. **TOML config, Python 3.11+.** Config file at `~/.config/textguard/config.toml` parsed with stdlib `tomllib`. Precedence: constructor kwargs > env vars > config file > defaults. Python 3.11+ minimum required (for `tomllib`).
+
+9. **Clean public API surface.** Top-level `__init__.py` exports: `scan`, `clean`, `TextGuard`, `ScanResult`, `CleanResult`, `Finding`, `Change`, `SemanticResult`. Primitives (`normalize_text`, `decode_text_layers`, `DecodedText`) accessible via submodule imports (`textguard.normalize`, `textguard.decode`) but not re-exported at top level. Documented for power users.
+
+**Rationale**: All open questions from the design review are now resolved. The PromptGuard raw-text correction is the most important change — it affects the scan pipeline architecture. The phase reordering (pipeline before detectors) means the integration shape is testable from Phase 3 onward. Finding safety and context opt-in prevent textguard from becoming a secondary injection vector in LLM pipelines. The seven decode layers cover the real-world encoding attack surface comprehensively without adding dependencies.
+
+**Open questions**: None blocking implementation. The coder can start Phase 1 scaffold.

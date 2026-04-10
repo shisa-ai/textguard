@@ -14,6 +14,7 @@ For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.
 - Reuse the useful `shisad` firewall primitives without importing daemon, policy, or trust-store complexity.
 - Provide both a Python API and a simple CLI.
 - Keep core runtime stdlib-only.
+- Require Python 3.11+ (stdlib `tomllib` for config).
 
 ## Non-Goals
 
@@ -111,7 +112,43 @@ def scan(text: str, **kwargs) -> ScanResult:
 
 ### Configuration
 
-`TextGuard` reads config from XDG-compliant paths (`~/.config/textguard/`), manually implemented without `platformdirs`. Environment variables override file config. Constructor kwargs override everything.
+`TextGuard` reads config from XDG-compliant paths (`~/.config/textguard/config.toml`), manually implemented without `platformdirs`. Config file parsed with stdlib `tomllib` (Python 3.11+).
+
+Precedence (highest to lowest):
+1. Constructor kwargs
+2. Environment variables (`TEXTGUARD_PRESET`, `TEXTGUARD_PROMPTGUARD_MODEL`, `TEXTGUARD_YARA_RULES_DIR`)
+3. Config file (`~/.config/textguard/config.toml`)
+4. Built-in defaults
+
+Example config file:
+
+```toml
+preset = "strict"
+promptguard_model = "~/.local/share/textguard/models/promptguard2"
+
+[yara]
+rules_dir = "~/.local/share/textguard/rules"
+bundled = true
+```
+
+The package works fine with no config file — everything has CLI flag and env var equivalents.
+
+### Public API Surface
+
+Top-level `__init__.py` exports:
+
+```python
+# Functions
+scan, clean
+
+# Main class
+TextGuard
+
+# Result types (for type hints and inspection)
+ScanResult, CleanResult, Finding, Change, SemanticResult
+```
+
+Internal types (`DecodedText`) and primitives (`normalize_text`, `decode_text_layers`) are importable from their submodules (`textguard.decode`, `textguard.normalize`) but not re-exported at the top level. This keeps the top-level namespace focused on the product surface while giving power users and library consumers (e.g., `shisad`) access to composable primitives.
 
 ## Package Layout
 
@@ -120,7 +157,7 @@ src/textguard/
 ├── __init__.py          # scan(), clean(), TextGuard, re-export public types
 ├── types.py             # ScanResult, CleanResult, Finding, Change, SemanticResult, DecodedText
 ├── normalize.py         # NFC/NFKC, invisible stripping, whitespace collapse, combining cap
-├── decode.py            # URL/HTML/ROT13/base64 bounded layer unwinding
+├── decode.py            # URL/HTML/ROT13/base64/unicode-escape/hex-escape/punycode bounded layer unwinding
 ├── clean.py             # cleaning pipeline, preset application
 ├── scan.py              # scan pipeline, finding aggregation
 ├── config.py            # XDG config loading, env var handling
@@ -135,9 +172,11 @@ src/textguard/
 │   ├── yara_backend.py  # optional yara-python integration
 │   └── promptguard.py   # optional ONNX PromptGuard2 backend
 └── data/
-    ├── allowed_signers  # SSH ed25519 public key for model verification
-    ├── scripts.json     # generated Unicode script-range table
-    └── confusables.json # generated trimmed confusables mapping
+    ├── allowed_signers      # SSH ed25519 public key for model verification
+    ├── scripts.json         # generated Unicode script-range table
+    ├── confusables.json     # generated trimmed confusables (Latin↔Cyrillic, Latin↔Greek)
+    ├── confusables_full.json # generated full cross-script confusables (opt-in)
+    └── rules/               # bundled YARA ruleset for common prompt injection patterns
 ```
 
 Module naming rule: no vague catchall names. Every module name should describe what it does, not what domain it relates to. `invisible.py` not `unicode.py`.
@@ -149,7 +188,7 @@ Module naming rule: no vague catchall names. Every module name should describe w
 1. **Normalize** — NFC (or NFKC in strict/ascii presets), strip/detect invisibles, bidi, tags, variation selectors, soft hyphens, zalgo
 2. **Decode** — bounded URL/HTML entity/ROT13/base64 layer unwinding with depth and expansion limits
 3. **Detect** — run all core detectors on both raw and decoded text: invisible chars, homoglyphs/mixed-script, encoded payload analysis
-4. **Backends** (optional) — run YARA rules against raw + decoded text, run PromptGuard against decoded text
+4. **Backends** (optional) — run YARA rules against raw + decoded text, run PromptGuard against **raw text** (encoding is signal for the classifier, not noise to remove)
 5. **Aggregate** — collect findings with severity levels, return `ScanResult`
 
 ### clean() Pipeline
@@ -185,6 +224,26 @@ Findings and scan reports use three severity levels:
 
 There is no aggregate risk score. Consumers decide their own thresholds based on findings.
 
+### Finding Safety
+
+`Finding.detail` is safe metadata only — codepoints, offsets, classification labels. It never echoes original text content. This makes findings safe to pass to LLMs without creating a secondary injection vector.
+
+The `--include-context` flag (CLI) or `include_context=True` (API) adds a `context` block to each finding with a short excerpt of the original text around the finding offset. This is opt-in for human debugging. In JSON output, the context block is structurally separate:
+
+```json
+{
+  "kind": "invisible_char",
+  "severity": "error",
+  "detail": "Tag character U+E0041",
+  "offset": 12,
+  "context": {
+    "excerpt": "safe text ..."
+  }
+}
+```
+
+The `context` key is only present when `--include-context` is set. Consumers can strip or ignore the block. If the excerpt itself needs sanitizing, pipe it through `textguard clean`.
+
 ## Detection Scope
 
 ### Core Detects (no dependencies)
@@ -196,8 +255,8 @@ There is no aggregate risk score. Consumers decide their own thresholds based on
 - Variation selectors
 - Combining mark abuse (zalgo)
 - Mixed-script / confusable homoglyphs
-- Encoded payload analysis: base64, split-token smuggling
-- Decode reason codes: `encoding:url_decoded`, `encoding:html_entity_decoded`, `encoding:rot13_decoded`, `encoding:decode_depth_limited`, `encoding:decode_bound_hit`
+- Encoded payload analysis: base64 smuggling, split-token detection (opt-in)
+- Decode reason codes for all seven decode layers plus depth/bound limits
 
 ### YARA Detects (optional `[yara]` extra)
 
@@ -206,7 +265,7 @@ There is no aggregate risk score. Consumers decide their own thresholds based on
 - Custom user-provided rules
 - Runs against **both raw and decoded text** — the decode pipeline is the force multiplier
 
-A bundled YARA ruleset ships with the package for common prompt injection patterns. Users can load additional rules or replace the defaults entirely.
+A bundled YARA ruleset ships in `data/rules/` for common prompt injection patterns. The YARA backend accepts `bundled=True` to load the shipped rules, a directory path for user rules, or both. Users can combine or replace the defaults entirely.
 
 ### PromptGuard Detects (optional `[promptguard]` extra)
 
@@ -218,11 +277,19 @@ A bundled YARA ruleset ships with the package for common prompt injection patter
 
 The decode module is the core value of the package. It is what makes YARA and PromptGuard effective against obfuscated attacks rather than only matching raw input.
 
-Bounded layer unwinding:
+Bounded layer unwinding — all layers are fast (sub-millisecond each) and low false-positive:
+
 - URL decoding (`urllib.parse.unquote`)
 - HTML entity decoding (`html.unescape`)
 - ROT13 decoding (signal-token gated — only applied when decoded text reveals known signal words)
-- Base64 detection (contiguous and split-token)
+- Base64 decoding (within bounds)
+- Unicode escape decoding (`\uXXXX` → character)
+- Hex escape decoding (`\xXX` → character)
+- Punycode decoding (`xn--` → Unicode)
+
+Each pass runs all layers in sequence, looping until nothing changes or depth is hit. Order within a pass: URL → HTML → ROT13 → base64 → Unicode escapes → hex escapes → Punycode.
+
+Split-token / fragmented encoding detection is available as an opt-in finding (not enabled by default due to false-positive risk). This flags patterns like fragmented base64 or partial URL encoding split across boundaries.
 
 Hard requirements:
 - Configurable `max_depth` (default 3)
@@ -231,15 +298,24 @@ Hard requirements:
 - Reason codes emitted for every decode step applied
 - `decode_depth_limited` emitted if max depth reached with more layers remaining
 
+Reason codes: `encoding:url_decoded`, `encoding:html_entity_decoded`, `encoding:rot13_decoded`, `encoding:base64_decoded`, `encoding:unicode_escape_decoded`, `encoding:hex_escape_decoded`, `encoding:punycode_decoded`, `encoding:decode_depth_limited`, `encoding:decode_bound_hit`.
+
 The decode pipeline must be referenceable from `shisad`'s adapter — `shisad` uses `decoded_text` (not `normalized_text`) as input to its secret redaction and rewrite stages.
+
+### What Gets Fed Where
+
+The decode pipeline is the force multiplier for downstream analysis, but different backends want different inputs:
+
+- **YARA**: receives **both raw and decoded text**. Patterns match against both — raw catches byte-level signatures, decoded catches content hidden behind encoding layers.
+- **PromptGuard**: receives **raw text only**. PromptGuard is a classifier trained on injection attempts. The encoding itself (ROT13-wrapped instructions, base64 payloads) is adversarial signal — decoding it first removes the signal the classifier is trained to detect.
 
 ## CLI Design
 
 Two main verbs plus a model management subcommand:
 
 ```bash
-textguard scan <path-or-stdin> [--json] [--preset PRESET] [--yara-rules DIR] [--promptguard PATH]
-textguard clean <path-or-stdin> [-i] [-o PATH] [--preset PRESET] [--report] [--json]
+textguard scan <path-or-stdin> [--json] [--preset PRESET] [--include-context] [--yara-rules DIR] [--promptguard PATH]
+textguard clean <path-or-stdin> [-i] [-o PATH] [--preset PRESET] [--report] [--json] [--include-context]
 textguard models fetch <model-name>
 ```
 
@@ -250,16 +326,30 @@ Output behavior:
 - `-o PATH` writes cleaned text to a file
 - `--report` prints a human-readable change report to stderr (useful with `-i` or `-o`)
 - `--json` for structured output combining cleaned text and findings
+- `--include-context` adds original text excerpts to findings (opt-in, not LLM-safe)
 - `scan` exit codes reflect finding severity for CI use
 
 Built on stdlib `argparse`. No `click` dependency.
 
 ## Generated Unicode Data
 
-- **Script-range table**: generated from Unicode `Scripts.txt`, vendored as `data/scripts.json`. Used by `detect/homoglyphs.py` for mixed-script detection.
-- **Confusables table**: generated from Unicode `confusables.txt`, trimmed to high-risk cross-script pairs, vendored as `data/confusables.json`. Used for confusable skeleton normalization.
-- Record upstream Unicode version in generated artifact metadata.
-- Prefer generated data over runtime dependencies like `regex` or `confusable-homoglyphs`.
+Generated by `scripts/generate_unicode_data.py`. See `scripts/README.md` for usage.
+
+Artifacts:
+
+- **`data/scripts.json`**: script-range table generated from Unicode `Scripts.txt`. Used by `detect/homoglyphs.py` for mixed-script detection.
+- **`data/confusables.json`**: trimmed confusables mapping (Latin↔Cyrillic, Latin↔Greek) generated from Unicode `confusables.txt`. The default for scan/clean — low false-positive, covers the most-exploited attack surface.
+- **`data/confusables_full.json`**: full cross-script confusables mapping. Opt-in for exhaustive coverage (useful for skill file checking where adversaries are thorough). Higher false-positive rate.
+
+Generation workflow:
+
+- Single script generates all artifacts: `python scripts/generate_unicode_data.py`
+- Script fetches upstream files from `https://www.unicode.org/Public/` with a pinned Unicode version
+- Upstream file hashes are verified against expected values stored in the script (provenance tracking, detects silent upstream changes)
+- Generated output includes metadata: upstream Unicode version, generation timestamp, source file hashes
+- Manual process — Unicode updates are annual. Run the generator, review the diff, commit the updated data files.
+
+Prefer generated data over runtime dependencies like `regex` or `confusable-homoglyphs`.
 
 ## Model Download Strategy
 
@@ -279,10 +369,11 @@ No `huggingface-hub` dependency. The download URLs point to the known HF repo. U
 
 ### Core
 
-Zero runtime dependencies. stdlib-only.
+Zero runtime dependencies. stdlib-only. Python 3.11+ required.
 
 - `unicodedata` for normalization and category checks
 - `argparse` for CLI
+- `tomllib` for config file parsing (Python 3.11+)
 - `hashlib` for model verification
 - `urllib.request` for model fetch
 - Vendored generated Unicode data for script ranges and confusables
@@ -304,48 +395,62 @@ CI uses `uv sync --frozen`. The lockfile is the security boundary. See `shisa-ai
 
 ### Phase 1: Scaffold
 
-- `pyproject.toml` with package metadata and optional extras
-- `src/textguard/` with `__init__.py` and `types.py`
+- `pyproject.toml` with package metadata, optional extras, Python 3.11+ requirement
+- `src/textguard/` with `__init__.py` and `types.py` (all public dataclasses)
 - `tests/`
 - `uv.lock`
+- `scripts/generate_unicode_data.py` (stub or full)
+- `scripts/README.md`
 
 ### Phase 2: Core normalize + decode
 
-- Normalization primitives (NFC, invisible/bidi/tag stripping, whitespace collapse, combining cap)
-- Bounded decode helpers (URL, HTML, ROT13, base64 detection)
-- Tests for benign multilingual text and adversarial Unicode
+- `normalize.py` — NFC/NFKC, invisible/bidi/tag stripping, whitespace collapse, combining cap
+- `decode.py` — bounded layer unwinding: URL, HTML, ROT13, base64, Unicode escapes, hex escapes, Punycode
+- Both modules emit `Finding` objects as they work (detect-as-side-effect)
+- Tests for benign multilingual text (including Japanese, Arabic, Persian) and adversarial Unicode
 
-### Phase 3: Core detection
+### Phase 3: scan + clean API
 
-- `detect/invisible.py` — invisible char and zalgo detection
-- `detect/homoglyphs.py` — mixed-script and confusable detection
-- `detect/encoded.py` — base64/split-token smuggling detection
-- Generated Unicode data tables (scripts, confusables)
-
-### Phase 4: scan + clean API
-
-- `ScanResult` and `CleanResult` implementation
-- `scan()` and `clean()` pipelines
+- `scan.py` — scan pipeline wiring, finding aggregation
+- `clean.py` — cleaning pipeline, preset application, change recording
+- `config.py` — XDG config loading (`tomllib`), env var handling
+- `TextGuard` class with config, `scan()`, `clean()`, direct backend method stubs
+- Top-level `scan()` and `clean()` wrapper functions in `__init__.py`
 - Preset system (default, strict, ascii)
-- `TextGuard` class with config
+- Tests for pipeline flow, preset behavior, config precedence
+
+### Phase 4: Core detection
+
+- `detect/invisible.py` — invisible char and zalgo detection (standalone, beyond what normalize already catches)
+- `detect/homoglyphs.py` — mixed-script detection, confusable skeleton normalization
+- `detect/encoded.py` — base64/split-token smuggling structural detection
+- `scripts/generate_unicode_data.py` — full implementation, generates `scripts.json`, `confusables.json`, `confusables_full.json`
+- Tests for mixed-script, confusable, and encoded payload findings
 
 ### Phase 5: CLI
 
-- `textguard scan` with `--json`, `--preset`, exit codes
-- `textguard clean` with `-i`, `-o`, `--report`, `--json`, `--preset`
+- `cli.py` — `argparse`-based CLI
+- `textguard scan` with `--json`, `--preset`, `--include-context`, exit codes
+- `textguard clean` with `-i`, `-o`, `--report`, `--json`, `--preset`, `--include-context`
 - `textguard models fetch` (stub or full)
 
 ### Phase 6: YARA backend
 
-- Optional YARA rule loading
+- `backends/yara_backend.py` — optional YARA rule loading
 - Run rules against raw + decoded text
-- Bundled default ruleset for common prompt injection patterns
+- Bundled default ruleset in `data/rules/`
+- `bundled=True` flag, user rules directory, or both
+- `TextGuard.match_yara()` direct access method
+- Tests with and without `[yara]` extra installed
 
 ### Phase 7: PromptGuard backend
 
-- Optional ONNX runtime integration
-- Model fetch with SSH signature verification
+- `backends/promptguard.py` — optional ONNX runtime integration
+- Receives **raw text** (encoding is signal, not noise)
+- Model fetch with SSH ed25519 signature verification and SHA-256 hash checking
 - `SemanticResult` integration into `ScanResult`
+- `TextGuard.score_semantic()` direct access method
+- Tests with and without `[promptguard]` extra installed
 
 ## Testing Requirements
 
@@ -353,10 +458,15 @@ At minimum:
 
 - Benign multilingual text (including Japanese, Arabic, Persian) stays readable through all presets
 - Zero-width, bidi, tag characters, soft hyphens, and variation selectors are detected correctly
-- Bounded decode limits are enforced
-- Mixed-script and confusable findings are tested
+- All seven decode layers work and respect bounded limits
+- Mixed-script and confusable findings are tested (both trimmed and full tables)
 - Clean output is explicit about lossy behavior via `CleanResult.changes`
-- Preset behavior matches specification
+- Preset behavior matches specification (default preserves CJK, strict applies NFKC, ascii is lossy)
 - Optional backends fail clearly when extras are not installed
+- YARA receives both raw and decoded text
+- PromptGuard receives raw text only
 - Model fetch verifies signatures and rejects tampered payloads
 - Severity levels are assigned correctly across finding types
+- `Finding.detail` never contains original text content (unless `--include-context`)
+- Config precedence: kwargs > env vars > config file > defaults
+- Split-token detection only fires when explicitly opted in
