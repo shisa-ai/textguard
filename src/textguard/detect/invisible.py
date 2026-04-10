@@ -40,7 +40,7 @@ def detect_invisible_text(
             Finding(
                 kind="ansi_escape",
                 severity="warn",
-                detail=f"ANSI escape sequence stripped{detail_suffix}",
+                detail=f"ANSI escape sequence detected{detail_suffix}",
                 offset=None if offset_mode is None else match.start(),
             )
         )

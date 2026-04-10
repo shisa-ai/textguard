@@ -79,6 +79,7 @@ PRESETS: dict[PresetName, Preset] = {
 class TextGuardConfig:
     preset: PresetName = "default"
     confusables: ConfusablesMode = "trimmed"
+    split_tokens: bool = False
     yara_rules_dir: Path | None = None
     yara_bundled: bool = False
     promptguard_model_path: Path | None = None
@@ -111,6 +112,7 @@ def resolve_config(overrides: dict[str, object] | None = None) -> TextGuardConfi
     return TextGuardConfig(
         preset=_coerce_preset(merged.get("preset", "default")),
         confusables=_coerce_confusables(merged.get("confusables", "trimmed")),
+        split_tokens=_coerce_bool(merged.get("split_tokens", False), field_name="split_tokens"),
         yara_rules_dir=_coerce_optional_path(merged.get("yara_rules_dir")),
         yara_bundled=_coerce_bool(merged.get("yara_bundled", False), field_name="yara_bundled"),
         promptguard_model_path=_coerce_optional_path(merged.get("promptguard_model_path")),
@@ -121,6 +123,7 @@ def _validate_override_keys(overrides: dict[str, object]) -> None:
     valid_keys = {
         "preset",
         "confusables",
+        "split_tokens",
         "yara_rules_dir",
         "yara_bundled",
         "promptguard_model_path",
@@ -137,13 +140,18 @@ def _config_file_values() -> dict[str, object]:
         return {}
 
     data = tomllib.loads(path.read_text(encoding="utf-8"))
+    _validate_config_file_keys(data)
     values: dict[str, object] = {}
     if "preset" in data:
         values["preset"] = data["preset"]
     if "confusables" in data:
         values["confusables"] = data["confusables"]
+    if "split_tokens" in data:
+        values["split_tokens"] = data["split_tokens"]
     if "promptguard_model" in data:
         values["promptguard_model_path"] = data["promptguard_model"]
+    if "promptguard_model_path" in data:
+        values["promptguard_model_path"] = data["promptguard_model_path"]
 
     yara = data.get("yara")
     if isinstance(yara, dict):
@@ -164,7 +172,36 @@ def _environment_values() -> dict[str, object]:
         values["promptguard_model_path"] = model_path
     if rules_dir := os.environ.get("TEXTGUARD_YARA_RULES_DIR"):
         values["yara_rules_dir"] = rules_dir
+    if yara_bundled := os.environ.get("TEXTGUARD_YARA_BUNDLED"):
+        values["yara_bundled"] = yara_bundled
+    if split_tokens := os.environ.get("TEXTGUARD_SPLIT_TOKENS"):
+        values["split_tokens"] = split_tokens
     return values
+
+
+def _validate_config_file_keys(data: dict[str, object]) -> None:
+    valid_top_level = {
+        "confusables",
+        "preset",
+        "promptguard_model",
+        "promptguard_model_path",
+        "split_tokens",
+        "yara",
+    }
+    invalid_top_level = sorted(set(data) - valid_top_level)
+    if invalid_top_level:
+        joined = ", ".join(invalid_top_level)
+        raise TypeError(f"Unexpected textguard config file keys: {joined}")
+    if "yara" not in data:
+        return
+    yara = data["yara"]
+    if not isinstance(yara, dict):
+        raise TypeError("textguard config [yara] section must be a table")
+    valid_yara = {"bundled", "rules_dir"}
+    invalid_yara = sorted(set(yara) - valid_yara)
+    if invalid_yara:
+        joined = ", ".join(invalid_yara)
+        raise TypeError(f"Unexpected textguard config [yara] keys: {joined}")
 
 
 def _coerce_preset(value: object) -> PresetName:
@@ -192,4 +229,10 @@ def _coerce_optional_path(value: object) -> Path | None:
 def _coerce_bool(value: object, *, field_name: str) -> bool:
     if isinstance(value, bool):
         return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
     raise TypeError(f"{field_name} must be a bool")

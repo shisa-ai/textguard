@@ -40,6 +40,12 @@ class DecodedText:
 
 @dataclass(slots=True)
 class ScanResult:
+    """Read-only analysis output from scan().
+
+    normalized_text and decoded_text are analysis artifacts: scan() normalizes and decodes
+    aggressively so downstream detectors and backends inspect the strongest available signal.
+    """
+
     findings: list[Finding] = field(default_factory=list)
     normalized_text: str = ""
     decoded_text: str = ""
@@ -50,6 +56,12 @@ class ScanResult:
 
 @dataclass(slots=True)
 class CleanResult:
+    """Cleaned output plus the findings that informed it.
+
+    findings reflect what scan() observed in the original and decoded analysis pipeline, not
+    just the subset of issues the active preset rewrote out of the final text.
+    """
+
     text: str = ""
     original_text: str = ""
     changes: list[Change] = field(default_factory=list)

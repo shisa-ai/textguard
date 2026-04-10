@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -21,6 +20,8 @@ def test_scan_help_includes_phase_five_flags(capsys: pytest.CaptureFixture[str])
     assert "--preset" in captured.out
     assert "--include-context" in captured.out
     assert "--confusables" in captured.out
+    assert "--split-tokens" in captured.out
+    assert "--no-yara-bundled" in captured.out
 
 
 def test_clean_reads_stdin_and_writes_stdout(
@@ -121,31 +122,117 @@ def test_scan_runtime_failure_exit_code_is_distinct_from_warn(
     assert captured.err
 
 
-def test_scan_promptguard_flag_passes_model_path_through(
+def test_scan_promptguard_and_detection_flags_pass_runtime_config_through(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    observed_paths: list[Path | None] = []
+    init_kwargs: list[dict[str, object]] = []
+    seen_texts: list[str] = []
 
-    def fake_scan(text: str, **kwargs: object) -> ScanResult:
-        observed_paths.append(cast(Path | None, kwargs.get("promptguard_model_path")))
-        return ScanResult(
-            semantic=SemanticResult(
-                score=0.91,
-                tier="critical",
-                classifier_id="promptguard-v2",
+    class FakeGuard:
+        def __init__(self, **kwargs: object) -> None:
+            init_kwargs.append(dict(kwargs))
+
+        def scan(self, text: str, *, include_context: bool = False) -> ScanResult:
+            assert include_context is False
+            seen_texts.append(text)
+            return ScanResult(
+                semantic=SemanticResult(
+                    score=0.0,
+                    tier="none",
+                    classifier_id="promptguard-v2",
+                )
             )
-        )
 
     monkeypatch.setattr("sys.stdin", io.StringIO("plain text"))
-    monkeypatch.setattr(cli, "scan", fake_scan)
+    monkeypatch.setattr(cli, "TextGuard", FakeGuard)
 
-    exit_code = cli.main(["scan", "-", "--promptguard", "/tmp/model-pack"])
+    exit_code = cli.main(
+        [
+            "scan",
+            "-",
+            "--promptguard",
+            "/tmp/model-pack",
+            "--split-tokens",
+            "--no-yara-bundled",
+        ]
+    )
     captured = capsys.readouterr()
 
     assert exit_code == 0
+    assert "SEMANTIC NONE promptguard-v2" in captured.out
+    assert init_kwargs == [
+        {
+            "preset": None,
+            "confusables": None,
+            "split_tokens": True,
+            "yara_rules_dir": None,
+            "yara_bundled": False,
+            "promptguard_model_path": Path("/tmp/model-pack"),
+        }
+    ]
+    assert seen_texts == ["plain text"]
+
+
+def test_scan_semantic_exit_code_can_gate_ci(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeGuard:
+        def __init__(self, **kwargs: object) -> None:
+            _ = kwargs
+
+        def scan(self, text: str, *, include_context: bool = False) -> ScanResult:
+            _ = (text, include_context)
+            return ScanResult(
+                semantic=SemanticResult(
+                    score=0.93,
+                    tier="critical",
+                    classifier_id="promptguard-v2",
+                )
+            )
+
+    monkeypatch.setattr("sys.stdin", io.StringIO("plain text"))
+    monkeypatch.setattr(cli, "TextGuard", FakeGuard)
+
+    exit_code = cli.main(["scan", "-"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 3
     assert "SEMANTIC CRITICAL promptguard-v2" in captured.out
-    assert observed_paths == [Path("/tmp/model-pack")]
+
+
+def test_scan_reuses_one_guard_for_multiple_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    seen_texts: list[str] = []
+    guard_instances = 0
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_text("one", encoding="utf-8")
+    second.write_text("two", encoding="utf-8")
+
+    class FakeGuard:
+        def __init__(self, **kwargs: object) -> None:
+            nonlocal guard_instances
+            _ = kwargs
+            guard_instances += 1
+
+        def scan(self, text: str, *, include_context: bool = False) -> ScanResult:
+            _ = include_context
+            seen_texts.append(text)
+            return ScanResult()
+
+    monkeypatch.setattr(cli, "TextGuard", FakeGuard)
+
+    exit_code = cli.main(["scan", str(first), str(second)])
+    capsys.readouterr()
+
+    assert exit_code == 0
+    assert guard_instances == 1
+    assert seen_texts == ["one", "two"]
 
 
 def test_cli_honors_config_file_when_preset_flag_is_omitted(
@@ -175,6 +262,35 @@ def test_cli_honors_config_file_when_preset_flag_is_omitted(
     assert payload["result"]["text"] == "A B"
 
 
+def test_scan_missing_input_file_returns_runtime_failure(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = cli.main(["scan", "does-not-exist.txt"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert "No such file or directory" in captured.err
+
+
+def test_scan_invalid_toml_config_returns_runtime_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    config_root = tmp_path / "xdg"
+    config_dir = config_root / "textguard"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config.toml").write_text("not = [valid\n", encoding="utf-8")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_root))
+    monkeypatch.setattr("sys.stdin", io.StringIO("plain text"))
+
+    exit_code = cli.main(["scan", "-"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert "Invalid value" in captured.err
+
+
 def test_models_fetch_command_surface_installs_model(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -187,3 +303,20 @@ def test_models_fetch_command_surface_installs_model(
 
     assert exit_code == 0
     assert captured.out.strip() == str(tmp_path / "promptguard2")
+
+
+def test_models_fetch_runtime_failure_uses_runtime_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def fail(model_name: str) -> Path:
+        _ = model_name
+        raise RuntimeError("fetch failed")
+
+    monkeypatch.setattr(cli, "fetch_promptguard_model", fail)
+
+    exit_code = cli.main(["models", "fetch", "promptguard2"])
+    captured = capsys.readouterr()
+
+    assert exit_code == 4
+    assert "fetch failed" in captured.err

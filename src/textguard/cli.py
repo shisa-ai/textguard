@@ -8,7 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import cast
 
-from . import clean, scan
+from . import TextGuard
 from .backends import fetch_promptguard_model
 from .config import PRESETS
 from .types import CleanResult, ScanResult
@@ -20,7 +20,14 @@ _SCAN_EXIT_CODES = {
     "warn": 2,
     "error": 3,
 }
+_SEMANTIC_EXIT_CODES = {
+    "none": 0,
+    "medium": 1,
+    "high": 2,
+    "critical": 3,
+}
 _EXIT_CODE_RUNTIME_ERROR = 4
+_CLI_RUNTIME_EXCEPTIONS = (OSError, RuntimeError, TypeError, UnicodeError, ValueError)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -126,16 +133,38 @@ def _add_common_scan_flags(parser: argparse.ArgumentParser) -> None:
         type=Path,
         help="Directory containing YARA rules to load alongside or instead of bundled rules.",
     )
-    parser.add_argument(
+    yara_bundled_group = parser.add_mutually_exclusive_group()
+    yara_bundled_group.add_argument(
         "--yara-bundled",
         action="store_true",
         default=None,
         help="Enable the bundled YARA ruleset.",
     )
+    yara_bundled_group.add_argument(
+        "--no-yara-bundled",
+        action="store_false",
+        dest="yara_bundled",
+        default=None,
+        help="Disable the bundled YARA ruleset even if config or env enables it.",
+    )
     parser.add_argument(
         "--promptguard",
         type=Path,
         help="Local PromptGuard model pack or artifact directory.",
+    )
+    split_token_group = parser.add_mutually_exclusive_group()
+    split_token_group.add_argument(
+        "--split-tokens",
+        action="store_true",
+        default=None,
+        help="Enable opt-in split-token smuggling detection in the scan pipeline.",
+    )
+    split_token_group.add_argument(
+        "--no-split-tokens",
+        action="store_false",
+        dest="split_tokens",
+        default=None,
+        help="Disable split-token smuggling detection even if config or env enables it.",
     )
 
 
@@ -150,38 +179,30 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _handle_scan(args: argparse.Namespace) -> int:
-    payloads = [_read_input(path_text) for path_text in cast(list[str], args.paths)]
     try:
+        guard = _build_textguard(args)
+        payloads = [_read_input(path_text) for path_text in cast(list[str], args.paths)]
         results = [
             (
                 label,
-                scan(
-                    text,
-                    include_context=args.include_context,
-                    preset=args.preset,
-                    confusables=args.confusables,
-                    yara_rules_dir=args.yara_rules,
-                    yara_bundled=args.yara_bundled,
-                    promptguard_model_path=args.promptguard,
-                ),
+                guard.scan(text, include_context=args.include_context),
             )
             for label, text in payloads
         ]
-    except RuntimeError as exc:
+        if args.json:
+            serialized = [
+                {
+                    "path": label,
+                    "result": asdict(result),
+                }
+                for label, result in results
+            ]
+            print(_json_dump(serialized[0] if len(serialized) == 1 else serialized))
+        else:
+            _print_scan_report(results)
+    except _CLI_RUNTIME_EXCEPTIONS as exc:
         _print_error(str(exc))
         return _EXIT_CODE_RUNTIME_ERROR
-
-    if args.json:
-        serialized = [
-            {
-                "path": label,
-                "result": asdict(result),
-            }
-            for label, result in results
-        ]
-        print(_json_dump(serialized[0] if len(serialized) == 1 else serialized))
-    else:
-        _print_scan_report(results)
 
     return max(_scan_exit_code(result) for _, result in results)
 
@@ -194,43 +215,54 @@ def _handle_clean(args: argparse.Namespace) -> int:
         _print_error("--in-place cannot be combined with -o/--output.")
         return 2
 
-    label, text = _read_input(cast(str, args.path))
     try:
-        result = clean(
-            text,
-            include_context=args.include_context,
-            preset=args.preset,
-            confusables=args.confusables,
-            yara_rules_dir=args.yara_rules,
-            yara_bundled=args.yara_bundled,
-            promptguard_model_path=args.promptguard,
-        )
-    except RuntimeError as exc:
+        guard = _build_textguard(args)
+        label, text = _read_input(cast(str, args.path))
+        result = guard.clean(text, include_context=args.include_context)
+
+        if args.in_place:
+            Path(args.path).write_text(result.text, encoding="utf-8")
+        elif args.output is not None:
+            args.output.write_text(result.text, encoding="utf-8")
+        elif not args.json:
+            sys.stdout.write(result.text)
+
+        if args.json:
+            print(_json_dump({"path": label, "result": asdict(result)}))
+        if args.report:
+            _print_clean_report(label, result)
+    except _CLI_RUNTIME_EXCEPTIONS as exc:
         _print_error(str(exc))
         return _EXIT_CODE_RUNTIME_ERROR
-
-    if args.in_place:
-        Path(args.path).write_text(result.text, encoding="utf-8")
-    elif args.output is not None:
-        args.output.write_text(result.text, encoding="utf-8")
-    elif not args.json:
-        sys.stdout.write(result.text)
-
-    if args.json:
-        print(_json_dump({"path": label, "result": asdict(result)}))
-    if args.report:
-        _print_clean_report(label, result)
     return 0
 
 
 def _handle_models_fetch(args: argparse.Namespace) -> int:
     try:
         destination = fetch_promptguard_model(args.model_name)
-    except (RuntimeError, ValueError) as exc:
+    except RuntimeError as exc:
+        _print_error(str(exc))
+        return _EXIT_CODE_RUNTIME_ERROR
+    except ValueError as exc:
         _print_error(str(exc))
         return 2
     print(destination)
     return 0
+
+
+def _build_textguard(args: argparse.Namespace) -> TextGuard:
+    return TextGuard(**_textguard_kwargs(args))
+
+
+def _textguard_kwargs(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "preset": args.preset,
+        "confusables": args.confusables,
+        "split_tokens": args.split_tokens,
+        "yara_rules_dir": args.yara_rules,
+        "yara_bundled": args.yara_bundled,
+        "promptguard_model_path": args.promptguard,
+    }
 
 
 def _read_input(path_text: str) -> tuple[str, str]:
@@ -244,6 +276,8 @@ def _scan_exit_code(result: ScanResult) -> int:
     code = 0
     for finding in result.findings:
         code = max(code, _SCAN_EXIT_CODES.get(finding.severity, 0))
+    if result.semantic is not None:
+        code = max(code, _SEMANTIC_EXIT_CODES.get(result.semantic.tier, 0))
     return code
 
 

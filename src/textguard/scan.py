@@ -17,6 +17,13 @@ def scan_text(
     config: TextGuardConfig,
     include_context: bool = False,
 ) -> ScanResult:
+    """Run the read-only analysis pipeline.
+
+    Scan-time normalization is intentionally aggressive regardless of the clean preset's
+    strip_* settings. Presets control rewrite behavior in clean(); scan() always unwraps
+    hostile formatting so detectors and optional backends analyze the strongest signal.
+    """
+
     findings: list[Finding] = []
 
     normalized_text = normalize_text(
@@ -33,7 +40,7 @@ def scan_text(
     decoded = decode_text_layers(normalized_text, findings=findings)
     findings.extend(detect_invisible_text(text))
     findings.extend(detect_homoglyphs(text, confusables=config.confusables))
-    findings.extend(detect_encoded_payloads(text))
+    findings.extend(detect_encoded_payloads(text, split_tokens=config.split_tokens))
     if decoded.text != normalized_text:
         findings.extend(detect_invisible_text(decoded.text, in_decoded_text=True))
         findings.extend(
@@ -43,7 +50,13 @@ def scan_text(
                 in_decoded_text=True,
             )
         )
-        findings.extend(detect_encoded_payloads(decoded.text, in_decoded_text=True))
+        findings.extend(
+            detect_encoded_payloads(
+                decoded.text,
+                split_tokens=config.split_tokens,
+                in_decoded_text=True,
+            )
+        )
 
     findings = dedupe_findings(findings)
 

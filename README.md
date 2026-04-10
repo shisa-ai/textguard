@@ -41,6 +41,7 @@ cleaned = clean(text)        # CleanResult
 # Configured instance — reusable, carries backend state
 guard = TextGuard(
     preset="strict",
+    split_tokens=True,
     yara_rules_dir="./rules/",
     promptguard_model_path="~/.local/share/textguard/models/promptguard2/",
 )
@@ -82,6 +83,10 @@ Presets control how aggressive cleaning is:
 
 The default preset preserves legitimate multilingual text. NFKC is not the default because it destroys semantic content in Japanese and other scripts. Strict and ascii presets opt into progressively more aggressive cleaning.
 
+Scan-time analysis is intentionally more aggressive than clean-time rewriting. `scan()` always strips hostile formatting and unwinds bounded encodings for analysis; presets control what `clean()` rewrites into the returned output.
+
+Split-token smuggling detection is opt-in. Enable it with `TextGuard(split_tokens=True)`, `TEXTGUARD_SPLIT_TOKENS=1`, config file `split_tokens = true`, or CLI `--split-tokens`.
+
 ## CLI
 
 ```bash
@@ -103,10 +108,12 @@ textguard clean SKILL.md --preset ascii
 
 # Optional backends
 textguard scan --yara-rules ./rules/ SKILL.md
+textguard scan --no-yara-bundled SKILL.md
+textguard scan --split-tokens SKILL.md
 textguard scan --promptguard ~/.local/share/textguard/models/promptguard2/ SKILL.md
 ```
 
-Exit codes from `scan` reflect the maximum finding severity (`0` none, `1` info, `2` warn, `3` error). Runtime failures (misconfigured backends, missing models, etc.) return `4`.
+Exit codes from `scan` reflect the strongest signal in the result: structural findings map to `0` none, `1` info, `2` warn, `3` error; semantic tiers map to `0` none, `1` medium, `2` high, `3` critical. Runtime failures across subcommands return `4`.
 
 ## Model Management
 

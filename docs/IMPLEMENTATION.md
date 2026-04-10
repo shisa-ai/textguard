@@ -216,9 +216,11 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--preset`
   - `--include-context`
   - `--confusables` (trimmed default, full opt-in)
+  - `--split-tokens`
   - backend flags:
     - `--yara-rules DIR`
     - `--yara-bundled`
+    - `--no-yara-bundled`
     - `--promptguard PATH`
 - [x] Implement `textguard clean`
   - stdout default
@@ -229,6 +231,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--preset`
   - `--include-context`
   - `--confusables`
+  - `--split-tokens`
   - backend flags (same config surfaces as scan)
 - [x] Implement `textguard models fetch` command surface
   - Phase 5 landed the surface

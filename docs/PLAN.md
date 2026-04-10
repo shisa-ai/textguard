@@ -76,7 +76,7 @@ class CleanResult:
     text: str              # the cleaned output
     original_text: str     # what went in
     changes: list[Change]  # what was modified and why
-    findings: list[Finding]  # same detections as scan
+    findings: list[Finding]  # same detections as scan, not just issues removed by the active preset
 ```
 
 ### TextGuard Class and Top-Level Functions
@@ -121,7 +121,7 @@ def clean(text: str, *, include_context: bool = False, **kwargs) -> CleanResult:
     return TextGuard(**kwargs).clean(text, include_context=include_context)
 ```
 
-Constructor kwargs (`preset`, `confusables`, `yara_rules_dir`, `promptguard_model_path`, etc.) configure the `TextGuard` instance. Per-call options (`include_context`) pass through to the method.
+Constructor kwargs (`preset`, `confusables`, `split_tokens`, `yara_rules_dir`, `promptguard_model_path`, etc.) configure the `TextGuard` instance. Per-call options (`include_context`) pass through to the method.
 
 `confusables` is a constructor parameter (instance config), not a per-call option — the confusable table is loaded once and reused across calls. Values: `"trimmed"` (default, Latin↔Cyrillic and Latin↔Greek) or `"full"` (all cross-script pairs, higher false-positive rate). Also settable via `TEXTGUARD_CONFUSABLES` env var, config file, or `--confusables` CLI flag.
 
@@ -131,7 +131,7 @@ Constructor kwargs (`preset`, `confusables`, `yara_rules_dir`, `promptguard_mode
 
 Precedence (highest to lowest):
 1. Constructor kwargs
-2. Environment variables (`TEXTGUARD_PRESET`, `TEXTGUARD_CONFUSABLES`, `TEXTGUARD_PROMPTGUARD_MODEL`, `TEXTGUARD_YARA_RULES_DIR`)
+2. Environment variables (`TEXTGUARD_PRESET`, `TEXTGUARD_CONFUSABLES`, `TEXTGUARD_SPLIT_TOKENS`, `TEXTGUARD_PROMPTGUARD_MODEL`, `TEXTGUARD_YARA_RULES_DIR`, `TEXTGUARD_YARA_BUNDLED`)
 3. Config file (`~/.config/textguard/config.toml`)
 4. Built-in defaults
 
@@ -139,12 +139,15 @@ Example config file:
 
 ```toml
 preset = "strict"
+split_tokens = true
 promptguard_model = "~/.local/share/textguard/models/promptguard2"
 
 [yara]
 rules_dir = "~/.local/share/textguard/rules"
 bundled = true
 ```
+
+Unknown config keys fail closed with an explicit error instead of being ignored silently.
 
 The package works fine with no config file — everything has CLI flag and env var equivalents.
 
@@ -205,6 +208,8 @@ Module naming rule: no vague catchall names. Every module name should describe w
 3. **Detect** — run all core detectors on both raw and decoded text: invisible chars, homoglyphs/mixed-script, encoded payload analysis
 4. **Backends** (optional) — run YARA rules against raw + decoded text, run PromptGuard against **raw text** (encoding is signal for the classifier, not noise to remove)
 5. **Aggregate** — collect findings with severity levels, return `ScanResult`
+
+Scan-time normalization is intentionally aggressive for analysis even when `clean()` is using a less destructive preset. Preset strip flags are clean-time rewrite settings; scan() always strips hostile formatting before detection.
 
 ### clean() Pipeline
 
@@ -344,7 +349,9 @@ Output behavior:
 - `--report` prints a human-readable change report to stderr (useful with `-i` or `-o`)
 - `--json` for structured output combining cleaned text and findings
 - `--include-context` adds original text excerpts to findings (opt-in, not LLM-safe)
-- `scan` exit codes reflect finding severity for CI use
+- `--split-tokens` / `--no-split-tokens` toggle opt-in split-token smuggling detection
+- `--yara-bundled` / `--no-yara-bundled` explicitly enable or disable bundled YARA rules
+- `scan` exit codes reflect the maximum of structural finding severity and semantic tier for CI use (`0` none, `1` info/medium, `2` warn/high, `3` error/critical)
 
 Built on stdlib `argparse`. No `click` dependency.
 

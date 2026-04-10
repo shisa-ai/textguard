@@ -43,6 +43,36 @@ jobs:
       - name: Run tests
         run: uv run pytest -q
 
+      - name: Build package
+        run: uv run python -m build
+
+      - name: Smoke test installed wheel
+        run: |
+          uv run python -m venv .wheel-smoke
+          . .wheel-smoke/bin/activate
+          pip install dist/textguard-*.whl
+          python - <<'PY'
+          import textguard
+          from importlib import resources
+
+          result = textguard.scan("hi")
+          assert result.decoded_text == "hi"
+
+          package_root = resources.files("textguard")
+          required = (
+              ("data", "scripts.json"),
+              ("data", "confusables.json"),
+              ("data", "confusables_full.json"),
+              ("data", "allowed_signers"),
+              ("data", "rules", "prompt_injection_direct.yara"),
+          )
+          for parts in required:
+              path = package_root
+              for part in parts:
+                  path = path.joinpath(part)
+              assert path.is_file(), parts
+          PY
+
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
