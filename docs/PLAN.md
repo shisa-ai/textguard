@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 4 are complete. CLI and optional backends remain to be implemented.
+Phases 1 through 5 are complete. Optional YARA and PromptGuard backends remain.
 
 For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
 

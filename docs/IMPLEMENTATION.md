@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 4 are complete. CLI work starts in Phase 5.
+Phases 1 through 5 are complete. Optional backend work starts in Phase 6.
 
 `docs/PLAN.md` is authoritative for architecture and public surface.
 This file is the execution checklist for implementing that plan in the `textguard` repo.
@@ -209,8 +209,8 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 5 — CLI
 
-- [ ] Implement `src/textguard/cli.py` with stdlib `argparse`
-- [ ] Implement `textguard scan`
+- [x] Implement `src/textguard/cli.py` with stdlib `argparse`
+- [x] Implement `textguard scan`
   - default human-readable output
   - `--json`
   - `--preset`
@@ -220,7 +220,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
     - `--yara-rules DIR`
     - `--yara-bundled`
     - `--promptguard PATH`
-- [ ] Implement `textguard clean`
+- [x] Implement `textguard clean`
   - stdout default
   - `-i`
   - `-o`
@@ -230,11 +230,11 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--include-context`
   - `--confusables`
   - backend flags (same stubs as scan)
-- [ ] Implement `textguard models fetch` command surface
+- [x] Implement `textguard models fetch` command surface
   - real implementation can land in Phase 7
   - CLI shape should exist by this phase if practical
-- [ ] Define and implement `scan` exit-code behavior that reflects finding severity for CI use
-- [ ] Add CLI tests for:
+- [x] Define and implement `scan` exit-code behavior that reflects finding severity for CI use
+- [x] Add CLI tests for:
   - help text
   - stdin/stdout flow
   - file output
