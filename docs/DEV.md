@@ -138,7 +138,7 @@ Create `docs/PUBLISH.md` modeled on outline-edit's release checklist, extended w
 
 ## shisad Consumption Model
 
-shisad currently has its own `normalize.py` in its firewall (`src/shisad/security/firewall/normalize.py`). The `docs/shisad-migration.md` covers the extraction plan.
+shisad currently has its own `normalize.py` in its firewall (`src/shisad/security/firewall/normalize.py`). The extraction/adoption path is tracked as separate `shisad` migration work rather than as a `textguard` repo document.
 
 **Decision: hybrid dependency placement.**
 

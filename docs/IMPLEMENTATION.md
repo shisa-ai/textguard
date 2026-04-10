@@ -288,7 +288,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 - [x] Sync `README.md` examples with the implemented package surface
 - [x] Keep `docs/PLAN.md` and `docs/IMPLEMENTATION.md` aligned as phases complete
-- [x] Reconcile finding names with `docs/shisad-migration.md`
+- [x] Reconcile finding names with `shisad` migration/adoption expectations
 - [x] Confirm the resulting surface is sufficient for later `shisad` adapter work
 
 ## Validation checklist

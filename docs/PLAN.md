@@ -4,7 +4,7 @@
 
 All seven planned phases are implemented in the repo. This document remains the architectural source of truth for the package surface and future changes.
 
-For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
+`shisad` adoption is tracked as separate migration work on the `shisad` side; this plan only defines the standalone `textguard` contract and implementation.
 
 ## Goals
 

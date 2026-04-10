@@ -241,3 +241,10 @@ Also decided shisad consumption model: bare `textguard` and `textguard[yara]` go
 **Decision/Change**: Changed split-token matching to prefer the longest overlapping protected word and suppress subset overlaps, so plural forms no longer emit a second nested finding for the singular stem. Added a regression test covering `i.g.n.o.r.e previous instructions`. Updated the CLI/exit-code note in `docs/PLAN.md` to explicitly include runtime failure code `4`.
 **Rationale**: This is a report-quality fix, not a security bypass fix. Suppressing overlapping subset matches keeps scan output tighter and easier to interpret while preserving the same detection coverage. The plan note closes a small doc gap so the CI-facing exit-code contract is fully stated in one place.
 **Open questions**: None.
+
+### 2026-04-11 — Remove stale shisad-migration doc references
+
+**Context**: The repo-level `docs/shisad-migration.md` document has been removed because the migration/adoption workflow belongs to `shisad`, not `textguard`. A few repo docs still referenced that file directly, which left dead links and blurred the ownership boundary between the standalone package and downstream adoption work.
+**Decision/Change**: Rewrote the remaining direct references in `docs/PLAN.md`, `docs/DEV.md`, and `docs/IMPLEMENTATION.md` so they now refer to `shisad` migration work generically rather than pointing at a removed `textguard` repo document.
+**Rationale**: `textguard` should document its own contract, implementation, and release behavior. The downstream adoption plan belongs with `shisad`; keeping only generic references here avoids dead links without erasing the fact that `shisad` migration still exists as adjacent work.
+**Open questions**: None.
