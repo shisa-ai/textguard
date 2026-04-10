@@ -40,7 +40,6 @@ If the repo is still sparse, create only the files required for the current task
 - Run `git status -sb` before editing and before committing.
 - Assume the worktree may be shared. Leave unrelated dirty or untracked files alone.
 - Do not overwrite, revert, or delete work you did not create unless the user explicitly instructs it.
-- Keep `CLAUDE.md` as a relative symlink to `AGENTS.md` so Claude and Codex read the same repo instructions.
 - Keep the public package generic. Do not hardcode org-specific URLs, secrets, local paths, or internal infrastructure assumptions.
 - Do not commit virtualenvs, caches, build artifacts, local databases, or credentials.
 - Prefer minimal runtime dependencies. Every added dependency needs a clear benefit.
