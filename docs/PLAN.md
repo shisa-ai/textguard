@@ -33,12 +33,17 @@ All public data types live in `src/textguard/types.py` and are re-exported from 
 
 ```python
 @dataclass
+class FindingContext:
+    excerpt: str           # short slice of original text around the finding offset
+
+@dataclass
 class Finding:
     kind: str              # "invisible_char", "mixed_script", "encoded_payload", etc.
     severity: str          # "info", "warn", "error"
-    detail: str = ""       # human-readable description
+    detail: str = ""       # human-readable description (never echoes original content)
     codepoint: str = ""    # "U+200B" (for unicode findings)
     offset: int | None = None  # character position in original text
+    context: FindingContext | None = None  # only populated when include_context=True
 
 @dataclass
 class Change:
@@ -103,12 +108,17 @@ yara_findings = guard.match_yara(text)  # list[Finding]
 
 Backends are accessible both through the `scan()` pipeline and independently. The pipeline is the recommended path, but direct access exists for consumers with their own pipelines (e.g., `shisad` scoring already-processed text).
 
-Top-level functions accept the same kwargs as `TextGuard.__init__` and pass them through:
+Top-level functions separate per-call options from constructor config:
 
 ```python
-def scan(text: str, **kwargs) -> ScanResult:
-    return TextGuard(**kwargs).scan(text)
+def scan(text: str, *, include_context: bool = False, **kwargs) -> ScanResult:
+    return TextGuard(**kwargs).scan(text, include_context=include_context)
+
+def clean(text: str, *, include_context: bool = False, **kwargs) -> CleanResult:
+    return TextGuard(**kwargs).clean(text, include_context=include_context)
 ```
+
+Constructor kwargs (`preset`, `yara_rules_dir`, `promptguard_model_path`, etc.) configure the `TextGuard` instance. Per-call options (`include_context`) pass through to the method.
 
 ### Configuration
 
@@ -145,7 +155,7 @@ scan, clean
 TextGuard
 
 # Result types (for type hints and inspection)
-ScanResult, CleanResult, Finding, Change, SemanticResult
+ScanResult, CleanResult, Finding, FindingContext, Change, SemanticResult
 ```
 
 Internal types (`DecodedText`) and primitives (`normalize_text`, `decode_text_layers`) are importable from their submodules (`textguard.decode`, `textguard.normalize`) but not re-exported at the top level. This keeps the top-level namespace focused on the product surface while giving power users and library consumers (e.g., `shisad`) access to composable primitives.
@@ -155,7 +165,7 @@ Internal types (`DecodedText`) and primitives (`normalize_text`, `decode_text_la
 ```text
 src/textguard/
 ├── __init__.py          # scan(), clean(), TextGuard, re-export public types
-├── types.py             # ScanResult, CleanResult, Finding, Change, SemanticResult, DecodedText
+├── types.py             # ScanResult, CleanResult, Finding, FindingContext, Change, SemanticResult, DecodedText
 ├── normalize.py         # NFC/NFKC, invisible stripping, whitespace collapse, combining cap
 ├── decode.py            # URL/HTML/ROT13/base64/unicode-escape/hex-escape/punycode bounded layer unwinding
 ├── clean.py             # cleaning pipeline, preset application
@@ -228,7 +238,7 @@ There is no aggregate risk score. Consumers decide their own thresholds based on
 
 `Finding.detail` is safe metadata only — codepoints, offsets, classification labels. It never echoes original text content. This makes findings safe to pass to LLMs without creating a secondary injection vector.
 
-The `--include-context` flag (CLI) or `include_context=True` (API) adds a `context` block to each finding with a short excerpt of the original text around the finding offset. This is opt-in for human debugging. In JSON output, the context block is structurally separate:
+The `--include-context` flag (CLI) or `include_context=True` (per-call API option) populates `Finding.context` — a `FindingContext` with a short excerpt of the original text around the finding offset. This is opt-in for human debugging. When `include_context` is not set, `Finding.context` is `None`.
 
 ```json
 {
@@ -242,7 +252,9 @@ The `--include-context` flag (CLI) or `include_context=True` (API) adds a `conte
 }
 ```
 
-The `context` key is only present when `--include-context` is set. Consumers can strip or ignore the block. If the excerpt itself needs sanitizing, pipe it through `textguard clean`.
+Consumers can ignore or strip the `context` field. If the excerpt itself needs sanitizing, pipe it through `textguard clean`.
+
+Note: `include_context` is a per-call option on `scan()` / `clean()`, not a `TextGuard` constructor parameter — it controls output shape, not instance configuration.
 
 ## Detection Scope
 
@@ -275,7 +287,7 @@ A bundled YARA ruleset ships in `data/rules/` for common prompt injection patter
 
 ## Decode Pipeline
 
-The decode module is the core value of the package. It is what makes YARA and PromptGuard effective against obfuscated attacks rather than only matching raw input.
+The decode module is the core value of the package. It is what makes YARA effective against obfuscated attacks — YARA matches against both raw and decoded text, so encoding layers don't hide payloads. (PromptGuard receives raw text only — see "What Gets Fed Where" below.)
 
 Bounded layer unwinding — all layers are fast (sub-millisecond each) and low false-positive:
 
