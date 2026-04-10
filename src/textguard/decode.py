@@ -10,7 +10,9 @@ from urllib.parse import unquote
 from .types import DecodedText, Finding
 
 _BASE64_RE = re.compile(r"[A-Za-z0-9+/=\s]{24,}")
-_BASE64_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/]{24,}={0,2}\b")
+_BASE64_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/=])"
+)
 _UNICODE_ESCAPE_RE = re.compile(r"\\u([0-9a-fA-F]{4})|\\U([0-9a-fA-F]{8})")
 _HEX_ESCAPE_RE = re.compile(r"\\x([0-9a-fA-F]{2})")
 _PUNYCODE_LABEL_RE = re.compile(r"\bxn--[a-z0-9-]+\b", re.IGNORECASE)

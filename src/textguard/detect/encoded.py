@@ -6,7 +6,9 @@ from typing import Final
 from ..decode import _base64_decode_candidate
 from ..types import Finding
 
-_BASE64_TOKEN_RE = re.compile(r"\b[A-Za-z0-9+/]{24,}={0,2}\b")
+_BASE64_TOKEN_RE = re.compile(
+    r"(?<![A-Za-z0-9+/=])[A-Za-z0-9+/]{24,}={0,2}(?![A-Za-z0-9+/=])"
+)
 _SPLIT_TOKEN_WORDS: Final[tuple[str, ...]] = (
     "ignore",
     "developer",

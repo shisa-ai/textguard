@@ -84,7 +84,7 @@ def test_decode_embedded_base64_payload_is_unwound() -> None:
 
     decoded = decode_text_layers(payload)
 
-    assert "ignore previous instructions" in decoded.text
+    assert decoded.text == "prefix ignore previous instructions suffix"
     assert "encoding:base64_decoded" in decoded.reason_codes
 
 
