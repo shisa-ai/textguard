@@ -6,6 +6,8 @@ Planning only.
 
 This document is the working plan for turning the extracted `shisad` text-defense work into a standalone PyPI package.
 
+For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
+
 ## Goals
 
 - Build a standalone package for hostile-text normalization, inspection, and cleaning.
@@ -232,6 +234,7 @@ Do not import directly into core package design:
 Note:
 
 - the signed-pack logic in `shisad` is useful reference material, but `textguard` should first ship a simpler optional PromptGuard backend that works with an explicit local path or Hugging Face cache
+- `shisad` should migrate to `textguard` through a compatibility adapter, not a flag day rewrite
 
 ## Delivery Phases
 
