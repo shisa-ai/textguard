@@ -2,9 +2,7 @@
 
 ## Status
 
-Planning only.
-
-This document is the working plan for turning the extracted `shisad` text-defense work into a standalone PyPI package.
+Planning only. No runtime code yet.
 
 For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
 
@@ -12,284 +10,353 @@ For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.
 
 - Build a standalone package for hostile-text normalization, inspection, and cleaning.
 - Preserve legitimate multilingual text by default.
-- Make the heavy detectors optional so the default install stays small.
-- Reuse the useful `shisad` firewall primitives without importing daemon, policy, or trust-store complexity into the base package.
+- Make heavy detectors optional so the default install stays small.
+- Reuse the useful `shisad` firewall primitives without importing daemon, policy, or trust-store complexity.
 - Provide both a Python API and a simple CLI.
+- Keep core runtime stdlib-only.
 
 ## Non-Goals
 
 - Rebuilding `shisad` as a second product.
-- ASCII-only sanitization as the default behavior.
+- ASCII-only sanitization as a default.
 - Shipping PromptGuard or YARA in the core install path.
 - Requiring network access for the core package.
+- An opaque aggregate risk score. Findings with severity levels are the data.
+- A built-in prompt-injection pattern engine. Pattern/phrase detection is YARA's job.
 
-## Package Shape
+## Core API Contract
 
-Initial target layout:
+### Types
 
-```text
-textguard/
-|- src/textguard/
-|  |- __init__.py
-|  |- normalize.py
-|  |- decode.py
-|  |- findings.py
-|  |- clean.py
-|  |- scan.py
-|  |- cli.py
-|  |- detect/
-|  |  |- unicode.py
-|  |  |- encoded.py
-|  |  |- patterns.py
-|  |  `- homoglyphs.py
-|  `- backends/
-|     |- yara_backend.py
-|     `- promptguard.py
-|- tests/
-|- README.md
-|- pyproject.toml
-`- docs/
-   `- PLAN.md
-```
-
-## User-Facing Surface
-
-### Python API
-
-Target shape:
+All public data types live in `src/textguard/types.py` and are re-exported from `__init__.py`.
 
 ```python
-from textguard import scan, clean, TextGuard
+@dataclass
+class Finding:
+    kind: str              # "invisible_char", "mixed_script", "encoded_payload", etc.
+    severity: str          # "info", "warn", "error"
+    detail: str = ""       # human-readable description
+    codepoint: str = ""    # "U+200B" (for unicode findings)
+    offset: int | None = None  # character position in original text
+
+@dataclass
+class Change:
+    kind: str              # "stripped", "normalized", "decoded", "capped"
+    detail: str = ""       # what was changed and why
+
+@dataclass
+class SemanticResult:
+    score: float           # classifier confidence
+    tier: str              # "none", "medium", "high", "critical"
+    classifier_id: str     # model identifier
+
+@dataclass
+class DecodedText:
+    text: str
+    reason_codes: tuple[str, ...] = ()
+    decode_depth: int = 0
+
+@dataclass
+class ScanResult:
+    findings: list[Finding]
+    normalized_text: str
+    decoded_text: str
+    decode_depth: int
+    decode_reason_codes: list[str]
+    semantic: SemanticResult | None = None
+
+@dataclass
+class CleanResult:
+    text: str              # the cleaned output
+    original_text: str     # what went in
+    changes: list[Change]  # what was modified and why
+    findings: list[Finding]  # same detections as scan
 ```
 
-### CLI
+### TextGuard Class and Top-Level Functions
 
-Target verbs:
+`TextGuard` holds configuration and optional backend state. Top-level `scan()` and `clean()` are thin wrappers that instantiate with defaults.
 
-- `textguard scan`
-- `textguard clean`
+```python
+# Top-level convenience (zero config, default preset, no backends)
+from textguard import scan, clean
 
-The core idea from the original design conversation still holds: one read-only verb and one sanitizing verb are enough.
+result = scan(text)      # ScanResult
+cleaned = clean(text)    # CleanResult
 
-## Core Technical Scope
+# Configured instance (preset, backends, reusable)
+from textguard import TextGuard
 
-### 1. Normalization
+guard = TextGuard(
+    preset="strict",
+    yara_rules_dir="./rules/",
+    promptguard_model_path="/path/to/model-pack",
+)
+result = guard.scan(text)
+cleaned = guard.clean(text)
 
-Implement in-house:
+# Direct backend access — bypass the scan/clean pipeline
+semantic = guard.score_semantic(text)   # SemanticResult
+yara_findings = guard.match_yara(text)  # list[Finding]
+```
 
-- Unicode normalization
-- removal of zero-width and invisible formatting characters
-- removal of bidi controls
-- soft hyphen stripping
-- tag character stripping
-- variation selector stripping
-- whitespace collapsing
-- bounded handling for combining-mark abuse
+Backends are accessible both through the `scan()` pipeline and independently. The pipeline is the recommended path, but direct access exists for consumers with their own pipelines (e.g., `shisad` scoring already-processed text).
 
-Recommendation:
+Top-level functions accept the same kwargs as `TextGuard.__init__` and pass them through:
 
-- normalize for detection with `NFKC`
-- keep destructive cleaning behavior explicit
-- preserve separate "normalized for analysis" and "cleaned for output" stages
+```python
+def scan(text: str, **kwargs) -> ScanResult:
+    return TextGuard(**kwargs).scan(text)
+```
 
-### 2. Decoding
+### Configuration
 
-Implement in-house:
+`TextGuard` reads config from XDG-compliant paths (`~/.config/textguard/`), manually implemented without `platformdirs`. Environment variables override file config. Constructor kwargs override everything.
 
-- URL decode
-- HTML entity decode
-- bounded ROT13 decode
-- bounded base64 inspection/detection
+## Package Layout
 
-Hard requirement:
+```text
+src/textguard/
+├── __init__.py          # scan(), clean(), TextGuard, re-export public types
+├── types.py             # ScanResult, CleanResult, Finding, Change, SemanticResult, DecodedText
+├── normalize.py         # NFC/NFKC, invisible stripping, whitespace collapse, combining cap
+├── decode.py            # URL/HTML/ROT13/base64 bounded layer unwinding
+├── clean.py             # cleaning pipeline, preset application
+├── scan.py              # scan pipeline, finding aggregation
+├── config.py            # XDG config loading, env var handling
+├── cli.py               # argparse CLI (scan, clean, models)
+├── detect/
+│   ├── __init__.py
+│   ├── invisible.py     # ZW, bidi, tags, variation selectors, soft hyphen, zalgo (combining abuse)
+│   ├── homoglyphs.py    # mixed-script detection, confusable skeleton
+│   └── encoded.py       # base64/split-token smuggling detection
+├── backends/
+│   ├── __init__.py
+│   ├── yara_backend.py  # optional yara-python integration
+│   └── promptguard.py   # optional ONNX PromptGuard2 backend
+└── data/
+    ├── allowed_signers  # SSH ed25519 public key for model verification
+    ├── scripts.json     # generated Unicode script-range table
+    └── confusables.json # generated trimmed confusables mapping
+```
 
-- all decode paths must have depth and expansion limits
+Module naming rule: no vague catchall names. Every module name should describe what it does, not what domain it relates to. `invisible.py` not `unicode.py`.
 
-### 3. Detection
+## Pipelines
 
-Implement in-house:
+### scan() Pipeline
 
-- invisible/bidi/tag/variation-selector findings
-- prompt-injection pattern matching
-- encoded payload findings
-- risk aggregation
+1. **Normalize** — NFC (or NFKC in strict/ascii presets), strip/detect invisibles, bidi, tags, variation selectors, soft hyphens, zalgo
+2. **Decode** — bounded URL/HTML entity/ROT13/base64 layer unwinding with depth and expansion limits
+3. **Detect** — run all core detectors on both raw and decoded text: invisible chars, homoglyphs/mixed-script, encoded payload analysis
+4. **Backends** (optional) — run YARA rules against raw + decoded text, run PromptGuard against decoded text
+5. **Aggregate** — collect findings with severity levels, return `ScanResult`
 
-Recommendation:
+### clean() Pipeline
 
-- use generated Unicode tables in core instead of runtime third-party Unicode helpers
-- keep the rest of the risk pipeline in-house
+1. **Scan** — run the full scan pipeline to identify findings
+2. **Apply preset** — execute the cleaning steps defined by the active preset
+3. **Record changes** — log each modification as a `Change` entry
+4. **Return** `CleanResult` with cleaned text, changes, and findings
 
-### 4. Generated Unicode Data
+Cleaning is scan-then-transform. The scan runs first so findings are always available regardless of how much the preset actually modifies.
 
-Recommended approach:
+### Presets
 
-- keep core runtime logic on stdlib `unicodedata`
-- generate and vendor a compact script-range table from Unicode `Scripts.txt`
-- generate and vendor a compact confusables table focused on high-risk cross-script pairs
+| Preset | Normalization | Strips | Decodes |
+|--------|--------------|--------|---------|
+| **default** | NFC | Tag chars, soft hyphens, whitespace collapse, combining mark cap | No |
+| **strict** | NFKC | All invisibles, bidi, variation selectors, tag chars, soft hyphens | URL, HTML, ROT13 |
+| **ascii** | NFKC + ASCII transliteration | Everything non-ASCII | All layers |
 
-Recommendation:
+**NFC is the default, not NFKC.** NFKC destroys semantic content in Japanese (fullwidth katakana, certain kana forms) and other scripts. The default preset must be safe for multilingual text. NFKC is opt-in via strict and ascii presets.
 
-- prefer a generated `Scripts.txt` range table over `unicodedata.name()` heuristics
-- keep a small fallback name-based path only if needed for edge cases
-- record the upstream Unicode version in the generated artifact metadata
+Each preset enables a defined set of cleaning steps. Individual steps are also available as composable functions for callers who want custom pipelines.
+
+### Severity Levels
+
+Findings and scan reports use three severity levels:
+
+| Level | Meaning | Examples |
+|-------|---------|---------|
+| `info` | Detected, not likely hostile | Mixed scripts in legitimately multilingual text |
+| `warn` | Suspicious, could be hostile or legitimate | ZWJ in non-emoji context, soft hyphens mid-word |
+| `error` | Almost certainly hostile or dangerous | Tag char sequences, bidi around instruction text, encoded prompt injection |
+
+There is no aggregate risk score. Consumers decide their own thresholds based on findings.
+
+## Detection Scope
+
+### Core Detects (no dependencies)
+
+- Invisible characters: ZWS, ZWNJ, ZWJ, BOM, invisible formatting
+- Bidi overrides and isolates
+- Tag characters (ASCII smuggling vector)
+- Soft hyphens
+- Variation selectors
+- Combining mark abuse (zalgo)
+- Mixed-script / confusable homoglyphs
+- Encoded payload analysis: base64, split-token smuggling
+- Decode reason codes: `encoding:url_decoded`, `encoding:html_entity_decoded`, `encoding:rot13_decoded`, `encoding:decode_depth_limited`, `encoding:decode_bound_hit`
+
+### YARA Detects (optional `[yara]` extra)
+
+- Pattern-based prompt injection phrase detection
+- Tool/tag spoofing signatures
+- Custom user-provided rules
+- Runs against **both raw and decoded text** — the decode pipeline is the force multiplier
+
+A bundled YARA ruleset ships with the package for common prompt injection patterns. Users can load additional rules or replace the defaults entirely.
+
+### PromptGuard Detects (optional `[promptguard]` extra)
+
+- Semantic prompt injection / jailbreak classification
+- Returns `SemanticResult` with score, tier, and classifier ID
+- Results nested as `ScanResult.semantic: SemanticResult | None`
+
+## Decode Pipeline
+
+The decode module is the core value of the package. It is what makes YARA and PromptGuard effective against obfuscated attacks rather than only matching raw input.
+
+Bounded layer unwinding:
+- URL decoding (`urllib.parse.unquote`)
+- HTML entity decoding (`html.unescape`)
+- ROT13 decoding (signal-token gated — only applied when decoded text reveals known signal words)
+- Base64 detection (contiguous and split-token)
+
+Hard requirements:
+- Configurable `max_depth` (default 3)
+- Configurable `max_expansion_ratio` (default 4.0)
+- Configurable `max_total_chars` (default 32768)
+- Reason codes emitted for every decode step applied
+- `decode_depth_limited` emitted if max depth reached with more layers remaining
+
+The decode pipeline must be referenceable from `shisad`'s adapter — `shisad` uses `decoded_text` (not `normalized_text`) as input to its secret redaction and rewrite stages.
+
+## CLI Design
+
+Two main verbs plus a model management subcommand:
+
+```bash
+textguard scan <path-or-stdin> [--json] [--preset PRESET] [--yara-rules DIR] [--promptguard PATH]
+textguard clean <path-or-stdin> [-i] [-o PATH] [--preset PRESET] [--report] [--json]
+textguard models fetch <model-name>
+```
+
+Output behavior:
+- `scan` outputs a human-readable summary by default, `--json` for structured output
+- `clean` outputs cleaned text to **stdout** by default
+- `-i` overwrites the input file in place (explicit opt-in, never default)
+- `-o PATH` writes cleaned text to a file
+- `--report` prints a human-readable change report to stderr (useful with `-i` or `-o`)
+- `--json` for structured output combining cleaned text and findings
+- `scan` exit codes reflect finding severity for CI use
+
+Built on stdlib `argparse`. No `click` dependency.
+
+## Generated Unicode Data
+
+- **Script-range table**: generated from Unicode `Scripts.txt`, vendored as `data/scripts.json`. Used by `detect/homoglyphs.py` for mixed-script detection.
+- **Confusables table**: generated from Unicode `confusables.txt`, trimmed to high-risk cross-script pairs, vendored as `data/confusables.json`. Used for confusable skeleton normalization.
+- Record upstream Unicode version in generated artifact metadata.
+- Prefer generated data over runtime dependencies like `regex` or `confusable-homoglyphs`.
+
+## Model Download Strategy
+
+PromptGuard model source: Hugging Face `shisa-ai/promptguard2-onnx`
+
+`textguard models fetch promptguard2`:
+1. Downloads files via stdlib `urllib.request` from known HF raw URLs
+2. Verifies SSH ed25519 signature over `manifest.json` using `ssh-keygen -Y verify` against the bundled `allowed_signers` public key
+3. Checks SHA-256 hashes from the manifest against downloaded files
+4. Places the pack in the XDG data directory (`~/.local/share/textguard/models/promptguard2/`)
+
+No `huggingface-hub` dependency. The download URLs point to the known HF repo. Users who already have the model (via `shisad`, manual download, or HF cache) point to it directly via `TEXTGUARD_PROMPTGUARD_MODEL` or the `--promptguard` flag.
+
+`shisad` users never need the fetch command — `shisad` has its own signed-pack verification flow and passes the resolved local path to `TextGuard`.
 
 ## Dependency Strategy
 
 ### Core
 
-Recommended initial direct dependencies:
+Zero runtime dependencies. stdlib-only.
 
-- none
+- `unicodedata` for normalization and category checks
+- `argparse` for CLI
+- `hashlib` for model verification
+- `urllib.request` for model fetch
+- Vendored generated Unicode data for script ranges and confusables
 
-Recommendation:
+### Optional Extras
 
-- keep the core runtime stdlib-only at first
-- keep the CLI on stdlib `argparse` initially
-- do not add `click` unless the CLI complexity proves it necessary
-- generate and commit the Unicode helper data used by the runtime
-- generate and commit `uv.lock`
+Floor pins in `pyproject.toml`. Exact resolution via committed `uv.lock` with hashes.
 
-### Optional: YARA
+```toml
+[project.optional-dependencies]
+yara = ["yara-python>=4.5.4"]
+promptguard = ["onnxruntime>=1.24.4", "transformers>=5.5.3"]
+all = ["textguard[yara,promptguard]"]
+```
 
-Recommended extra:
-
-- `yara-python==4.5.4`
-
-Reason:
-
-- worth pulling rather than re-implementing a signature engine
-- compiled dependency, so it should stay out of the default install
-
-### Optional: PromptGuard
-
-Recommended extra:
-
-- `onnxruntime==1.24.4`
-- `transformers==5.5.3`
-
-Not recommended initially:
-
-- `huggingface-hub`
-- `safetensors`
-- `sentencepiece`
-
-Reason:
-
-- the current `shisa-ai/promptguard2-onnx` pack exposes `model.onnx`, `model.onnx.data`, and `tokenizer.json`
-- there is no reason to carry additional model-format or model-download dependencies unless they are actually needed
-
-Follow-up optimization:
-
-- start with `transformers` for bring-up speed
-- keep the backend isolated so we can later swap to a lighter `tokenizers`-only path if startup cost matters
-- add `huggingface-hub` only if we implement an explicit fetch command or managed download path
-
-## PromptGuard Plan
-
-Model source:
-
-- Hugging Face: `shisa-ai/promptguard2-onnx`
-
-Approximate size as of 2026-04-10:
-
-- `payload/model.onnx`: `2.5 MB`
-- `payload/model.onnx.data`: `283.3 MB`
-- `payload/tokenizer.json`: `8.7 MB`
-- total model payload: about `294.5 MB`
-
-Primary wheel downloads as of 2026-04-10:
-
-- `onnxruntime`: about `17.3 MB`
-- `transformers`: about `10.2 MB`
-- transitive dependencies come on top of that
-
-Recommendation:
-
-- `textguard[promptguard]` should enable the backend
-- default behavior should use a local path or existing Hugging Face cache
-- do not silently auto-download a ~295 MB model pack in the default path
-- if we support download-on-demand, make it explicit via a subcommand, flag, or environment variable
-- if we add managed fetch support, that is the point where `huggingface-hub` should become an optional dependency
-
-Suggested interface:
-
-- `TEXTGUARD_PROMPTGUARD_MODEL=/path/to/model-pack`
-- optional future command: `textguard models fetch promptguard2`
-
-## Reuse From shisad
-
-Re-use:
-
-- normalization ideas
-- bounded decode strategy
-- prompt-injection detection concepts
-- PromptGuard ONNX backend shape
-
-Do not import directly into core package design:
-
-- daemon/runtime wiring
-- policy engine concepts
-- signed model-pack enforcement as a core package requirement
-
-Note:
-
-- the signed-pack logic in `shisad` is useful reference material, but `textguard` should first ship a simpler optional PromptGuard backend that works with an explicit local path or Hugging Face cache
-- `shisad` should migrate to `textguard` through a compatibility adapter, not a flag day rewrite
-- `textguard` does not need to preserve `shisad`'s internal shapes verbatim; it needs to expose the primitives and result surface that let `shisad` adapt cleanly
+CI uses `uv sync --frozen`. The lockfile is the security boundary. See `shisa-ai/supply-chain-security` for policy.
 
 ## Delivery Phases
 
 ### Phase 1: Scaffold
 
-- add `pyproject.toml`
-- add `src/textguard/`
-- add `tests/`
-- add package metadata and initial lockfile
+- `pyproject.toml` with package metadata and optional extras
+- `src/textguard/` with `__init__.py` and `types.py`
+- `tests/`
+- `uv.lock`
 
-### Phase 2: Core normalize/decode
+### Phase 2: Core normalize + decode
 
-- port and improve the normalization primitives
-- add bounded decode helpers
-- add tests for benign Unicode and adversarial Unicode
+- Normalization primitives (NFC, invisible/bidi/tag stripping, whitespace collapse, combining cap)
+- Bounded decode helpers (URL, HTML, ROT13, base64 detection)
+- Tests for benign multilingual text and adversarial Unicode
 
-### Phase 3: Scan/clean API
+### Phase 3: Core detection
 
-- define result dataclasses
-- implement `scan()` and `clean()`
-- wire risk findings
+- `detect/invisible.py` — invisible char and zalgo detection
+- `detect/homoglyphs.py` — mixed-script and confusable detection
+- `detect/encoded.py` — base64/split-token smuggling detection
+- Generated Unicode data tables (scripts, confusables)
 
-### Phase 4: CLI
+### Phase 4: scan + clean API
 
-- add `textguard scan`
-- add `textguard clean`
-- add `--json` and output-path support
+- `ScanResult` and `CleanResult` implementation
+- `scan()` and `clean()` pipelines
+- Preset system (default, strict, ascii)
+- `TextGuard` class with config
 
-### Phase 5: YARA backend
+### Phase 5: CLI
 
-- add optional rule loading
-- add YARA-backed findings and tests
+- `textguard scan` with `--json`, `--preset`, exit codes
+- `textguard clean` with `-i`, `-o`, `--report`, `--json`, `--preset`
+- `textguard models fetch` (stub or full)
 
-### Phase 6: PromptGuard backend
+### Phase 6: YARA backend
 
-- add optional ONNX runtime integration
-- add local-path and cached-model support
-- decide whether explicit fetch support is worth including in v1
+- Optional YARA rule loading
+- Run rules against raw + decoded text
+- Bundled default ruleset for common prompt injection patterns
+
+### Phase 7: PromptGuard backend
+
+- Optional ONNX runtime integration
+- Model fetch with SSH signature verification
+- `SemanticResult` integration into `ScanResult`
 
 ## Testing Requirements
 
 At minimum:
 
-- benign multilingual text stays readable
-- zero-width, bidi, tag characters, soft hyphen, and variation selectors are detected correctly
-- bounded decode limits are enforced
-- mixed-script and confusable findings are tested
-- clean output is explicit about lossy behavior
-- optional backends fail clearly when extras are not installed
-
-## Immediate Next Step
-
-Next implementation task after planning:
-
-- scaffold `pyproject.toml`, `src/textguard/`, and `tests/`
-- wire the core dependency split with optional extras
-- start with normalization and hostile-Unicode tests
+- Benign multilingual text (including Japanese, Arabic, Persian) stays readable through all presets
+- Zero-width, bidi, tag characters, soft hyphens, and variation selectors are detected correctly
+- Bounded decode limits are enforced
+- Mixed-script and confusable findings are tested
+- Clean output is explicit about lossy behavior via `CleanResult.changes`
+- Preset behavior matches specification
+- Optional backends fail clearly when extras are not installed
+- Model fetch verifies signatures and rejects tampered payloads
+- Severity levels are assigned correctly across finding types

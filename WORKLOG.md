@@ -35,3 +35,37 @@ Chronological development log. Append new entries at the bottom. Do not rewrite 
 **Decision/Change**: Removed the "prefer smaller finished commits" line from `AGENTS.md` and kept the clearer rules only: commit on logical-unit completion, treat docs/planning/repo-setup work as committable units, and do not wait to be asked.
 **Rationale**: The repo should optimize for coherent logical-unit commits, not for smaller commits as a separate goal. Keeping both rules invites misinterpretation and unnecessary oversplitting.
 **Open questions**: None. The commit policy is clearer without the extra size-oriented guidance.
+
+### 2026-04-10 — Design review: 10 decisions finalized, docs restructured
+
+**Context**: Reviewed README.md, docs/PLAN.md, and docs/shisad-migration.md against the original design conversation (shisad-dev/research/textguard-conversation.md). Identified gaps where the earlier conversation's clarity had been diluted or where key design decisions were left implicit. Walked through each open item to reach a decision.
+
+**Decisions made**:
+
+1. **Two return types, not one.** `ScanResult` for `scan()`, `CleanResult` for `clean()`. Each type is focused — scan returns findings and decode metadata, clean returns the safe text plus a change log. Avoids a god-object that grows fields for both use cases.
+
+2. **`clean()` pipeline: composable steps with presets.** Individual cleaning operations (strip invisibles, normalize, decode, etc.) are standalone composable functions. `clean()` applies a preset — a curated bundle of steps. Three presets: default (NFC, tag chars, soft hyphens, whitespace, combining cap — safe for all multilingual text including Japanese), strict (NFKC, all invisibles, bidi, decoding — for skill files and prompts), ascii (nuclear ASCII-only). **NFC is the default, not NFKC** — NFKC destroys semantic content in Japanese and other CJK scripts.
+
+3. **Severity levels on findings: info/warn/error.** Findings always carry severity. `scan()` flags things even when `clean()` in default mode wouldn't act on them. No opaque aggregate risk score — the earlier conversation's `risk_score: float` was model-generated noise, not a principled design. Consumers (shisad, CI scripts) decide their own thresholds from the raw findings.
+
+4. **Top-level functions wrap `TextGuard`.** `scan(text, **kwargs)` and `clean(text, **kwargs)` instantiate `TextGuard` internally with defaults. `TextGuard` holds config (preset, backend paths, YARA rules). Manual XDG config paths, no `platformdirs` dependency.
+
+5. **`detect/` layout: invisible.py, homoglyphs.py, encoded.py.** No `patterns.py` — prompt injection phrase detection is YARA's job, not a hand-rolled regex engine. No `unicode.py` — vague catchall module names are banned. Zalgo detection folds into `invisible.py` since both produce "this character/sequence shouldn't be here" findings.
+
+6. **No core pattern engine. YARA for all phrase detection.** Core detectors handle structural/character-level analysis only (invisibles, homoglyphs, encoding abuse). Pattern/phrase matching (instruction override, tool spoofing, role hijacking) lives entirely in YARA rules. YARA runs against both raw and decoded text — the decode pipeline is the force multiplier that makes YARA effective against obfuscated attacks. A bundled YARA ruleset ships with the package but is not loaded by default.
+
+7. **Public `types.py` for all data types.** `ScanResult`, `CleanResult`, `Finding`, `Change`, `SemanticResult`, `DecodedText` all live in `types.py`. Key types re-exported from `__init__.py`. `findings.py` was rejected — the name implies detection logic, not type definitions.
+
+8. **`SemanticResult` as nested optional.** `ScanResult.semantic: SemanticResult | None` instead of three nullable top-level fields. Keeps the core result clean when PromptGuard is not enabled.
+
+9. **Floor pins in pyproject.toml, lockfile as authority.** `>=` version floors for optional extras. Exact resolution via committed `uv.lock` with hashes. Follows shisa-ai/supply-chain-security Python policy: "fully pinned via lockfile, not via manual == specs." CI uses `uv sync --frozen`.
+
+10. **CLI clean: stdout default, -i for in-place.** `textguard clean FILE` outputs to stdout (Unix filter convention). `-i` overwrites in place (explicit opt-in). `-o PATH` for file output. `--report` prints human-readable change report to stderr (for use with -i or -o). `--json` for structured output. Safe default — a security tool should not be destructive by default.
+
+11. **Model download: direct HTTP + SSH signature verification.** `textguard models fetch promptguard2` downloads from HF raw URLs via stdlib `urllib.request`, verifies SSH ed25519 signature via `ssh-keygen -Y verify` against a bundled `allowed_signers` public key, checks SHA-256 hashes from the manifest. Places in XDG data dir. No `huggingface-hub` dependency. shisad users pass their own verified local path.
+
+12. **Doc restructuring.** README.md is user-facing: what it does, protection tiers with dependency sizes, install, API/CLI examples, presets, design constraints. docs/PLAN.md is the implementation blueprint: API contract, module layout, pipelines, dependency strategy, delivery phases. docs/shisad-migration.md is the shisad adoption path: adapter design, compatibility surface, validation gates. PromptGuard detail moved out of README (kept only the size summary), result type definitions moved from migration doc to PLAN, "reuse from shisad" moved from PLAN to migration doc.
+
+**Rationale**: The original design conversation had good instincts (two verbs, composable API, optional backends) but the planning docs had drifted from that clarity. Key design gaps — what clean() does, how types relate, whether patterns.py should exist — needed explicit decisions before implementation could start cleanly. The supply-chain-security repo's Python policy resolved the version pinning question.
+
+**Open questions**: Metadata injection concern — findings/results passed to LLMs need to be safe from becoming a secondary injection vector. Need to think about how Finding.detail strings are constructed. Decode pipeline scope needs detailed design during Phase 2 (what layers, what order, how to handle split-token and mixed encoding). Confusables table trimming criteria (which cross-script pairs are "high-risk") needs definition during Phase 3.
