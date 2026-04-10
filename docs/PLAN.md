@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 6 are complete. PromptGuard backend and model fetch remain.
+All seven planned phases are implemented in the repo. This document remains the architectural source of truth for the package surface and future changes.
 
 For the `shisad` adoption path, see [docs/shisad-migration.md](shisad-migration.md).
 

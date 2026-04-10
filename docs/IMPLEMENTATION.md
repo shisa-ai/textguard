@@ -2,7 +2,7 @@
 
 ## Status
 
-Phases 1 through 6 are complete. PromptGuard backend work starts in Phase 7.
+Implementation complete. All seven planned phases are now landed in the repo.
 
 `docs/PLAN.md` is authoritative for architecture and public surface.
 This file is the execution checklist for implementing that plan in the `textguard` repo.
@@ -216,7 +216,7 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--preset`
   - `--include-context`
   - `--confusables` (trimmed default, full opt-in)
-  - backend flags (stub if backends not yet implemented, error with install hint):
+  - backend flags:
     - `--yara-rules DIR`
     - `--yara-bundled`
     - `--promptguard PATH`
@@ -229,10 +229,10 @@ Do not revert to the older ordering where detection comes before the scan/clean 
   - `--preset`
   - `--include-context`
   - `--confusables`
-  - backend flags (same stubs as scan)
+  - backend flags (same config surfaces as scan)
 - [x] Implement `textguard models fetch` command surface
-  - real implementation can land in Phase 7
-  - CLI shape should exist by this phase if practical
+  - Phase 5 landed the surface
+  - Phase 7 completed the fetch/verify/install behavior
 - [x] Define and implement `scan` exit-code behavior that reflects finding severity for CI use
 - [x] Add CLI tests for:
   - help text
@@ -263,17 +263,17 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Phase 7 — PromptGuard backend + model fetch
 
-- [ ] Implement `src/textguard/backends/promptguard.py`
-- [ ] Implement PromptGuard integration into `ScanResult.semantic`
-- [ ] Ensure PromptGuard receives raw text only
-- [ ] Implement direct backend access:
+- [x] Implement `src/textguard/backends/promptguard.py`
+- [x] Implement PromptGuard integration into `ScanResult.semantic`
+- [x] Ensure PromptGuard receives raw text only
+- [x] Implement direct backend access:
   - `guard.score_semantic(text)`
-- [ ] Implement model fetch and verification
+- [x] Implement model fetch and verification
   - stdlib download via `urllib.request`
   - SSH signature verification via `ssh-keygen -Y verify`
   - SHA-256 manifest verification
   - install path under XDG data dir
-- [ ] Add tests for:
+- [x] Add tests for:
   - missing extra
   - local model path handling
   - raw-text semantic scoring
@@ -283,20 +283,20 @@ Do not revert to the older ordering where detection comes before the scan/clean 
 
 ## Docs parity and downstream readiness
 
-- [ ] Sync `README.md` examples with the implemented package surface
-- [ ] Keep `docs/PLAN.md` and `docs/IMPLEMENTATION.md` aligned as phases complete
-- [ ] Reconcile finding names with `docs/shisad-migration.md`
-- [ ] Confirm the resulting surface is sufficient for later `shisad` adapter work
+- [x] Sync `README.md` examples with the implemented package surface
+- [x] Keep `docs/PLAN.md` and `docs/IMPLEMENTATION.md` aligned as phases complete
+- [x] Reconcile finding names with `docs/shisad-migration.md`
+- [x] Confirm the resulting surface is sufficient for later `shisad` adapter work
 
 ## Validation checklist
 
-- [ ] `python3 -m py_compile src/textguard/*.py tests/*.py`
-- [ ] Focused `uv run pytest` during development
-- [ ] `uv run pytest -q` once the initial scaffold and core runtime are in place
-- [ ] `python3 -m build` once packaging metadata exists
+- [x] `python3 -m py_compile src/textguard/*.py tests/*.py`
+- [x] Focused `uv run pytest` during development
+- [x] `uv run pytest -q` once the initial scaffold and core runtime are in place
+- [x] `python3 -m build` once packaging metadata exists
 
-## Current implementation recommendation
+## Historical implementation recommendation
 
-- Start with Phases 1 through 3
-- Do not begin YARA or PromptGuard work until the core scan/clean pipeline is stable
-- Keep `shisad` unchanged until `textguard` has stable normalize, decode, findings, and `decoded_text` semantics
+- The work was completed in the documented phase order
+- YARA and PromptGuard landed only after the core scan/clean pipeline stabilized
+- `shisad` adapter work remains intentionally separate from this package implementation

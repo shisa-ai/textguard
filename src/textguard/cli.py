@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from . import clean, scan
+from .backends import fetch_promptguard_model
 from .config import PRESETS
 from .types import CleanResult, ScanResult
 
@@ -82,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_parser = models_subparsers.add_parser(
         "fetch",
         help="Fetch a named model pack.",
-        description="Fetch a named model pack once the backend downloader lands.",
+        description="Fetch and verify a named model pack.",
     )
     fetch_parser.add_argument("model_name", help="Model name to fetch.")
     fetch_parser.set_defaults(handler=_handle_models_fetch)
@@ -116,17 +117,17 @@ def _add_common_scan_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--yara-rules",
         type=Path,
-        help="Directory containing YARA rules. Placeholder until the YARA backend lands.",
+        help="Directory containing YARA rules to load alongside or instead of bundled rules.",
     )
     parser.add_argument(
         "--yara-bundled",
         action="store_true",
-        help="Enable bundled YARA rules. Placeholder until the YARA backend lands.",
+        help="Enable the bundled YARA ruleset.",
     )
     parser.add_argument(
         "--promptguard",
         type=Path,
-        help="PromptGuard model pack path. Placeholder until the PromptGuard backend lands.",
+        help="Local PromptGuard model pack or artifact directory.",
     )
 
 
@@ -141,11 +142,6 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _handle_scan(args: argparse.Namespace) -> int:
-    backend_error = _backend_flag_error(args)
-    if backend_error is not None:
-        _print_error(backend_error)
-        return 2
-
     payloads = [_read_input(path_text) for path_text in cast(list[str], args.paths)]
     try:
         results = [
@@ -158,6 +154,7 @@ def _handle_scan(args: argparse.Namespace) -> int:
                     confusables=args.confusables,
                     yara_rules_dir=args.yara_rules,
                     yara_bundled=args.yara_bundled,
+                    promptguard_model_path=args.promptguard,
                 ),
             )
             for label, text in payloads
@@ -189,11 +186,6 @@ def _handle_clean(args: argparse.Namespace) -> int:
         _print_error("--in-place cannot be combined with -o/--output.")
         return 2
 
-    backend_error = _backend_flag_error(args)
-    if backend_error is not None:
-        _print_error(backend_error)
-        return 2
-
     label, text = _read_input(cast(str, args.path))
     try:
         result = clean(
@@ -203,6 +195,7 @@ def _handle_clean(args: argparse.Namespace) -> int:
             confusables=args.confusables,
             yara_rules_dir=args.yara_rules,
             yara_bundled=args.yara_bundled,
+            promptguard_model_path=args.promptguard,
         )
     except RuntimeError as exc:
         _print_error(str(exc))
@@ -223,20 +216,13 @@ def _handle_clean(args: argparse.Namespace) -> int:
 
 
 def _handle_models_fetch(args: argparse.Namespace) -> int:
-    _print_error(
-        f"textguard models fetch {args.model_name} is not implemented yet. "
-        "PromptGuard model fetch lands in Phase 7."
-    )
-    return 2
-
-
-def _backend_flag_error(args: argparse.Namespace) -> str | None:
-    if getattr(args, "promptguard", None) is not None:
-        return (
-            "PromptGuard backend is not implemented yet. "
-            "Install hint: textguard[promptguard]."
-        )
-    return None
+    try:
+        destination = fetch_promptguard_model(args.model_name)
+    except (RuntimeError, ValueError) as exc:
+        _print_error(str(exc))
+        return 2
+    print(destination)
+    return 0
 
 
 def _read_input(path_text: str) -> tuple[str, str]:
@@ -257,16 +243,21 @@ def _print_scan_report(results: list[tuple[str, ScanResult]]) -> None:
     for label, result in results:
         if not result.findings:
             print(f"{label}: no findings")
-            continue
-        print(f"{label}: {len(result.findings)} finding(s)")
-        for finding in result.findings:
-            location = "" if finding.offset is None else f" @ {finding.offset}"
-            context = ""
-            if finding.context is not None:
-                context = f" [{finding.context.excerpt!r}]"
+        else:
+            print(f"{label}: {len(result.findings)} finding(s)")
+            for finding in result.findings:
+                location = "" if finding.offset is None else f" @ {finding.offset}"
+                context = ""
+                if finding.context is not None:
+                    context = f" [{finding.context.excerpt!r}]"
+                print(
+                    f"{finding.severity.upper()} {finding.kind}{location}: "
+                    f"{finding.detail}{context}"
+                )
+        if result.semantic is not None:
             print(
-                f"{finding.severity.upper()} {finding.kind}{location}: "
-                f"{finding.detail}{context}"
+                f"SEMANTIC {result.semantic.tier.upper()} {result.semantic.classifier_id}: "
+                f"score={result.semantic.score:.3f}"
             )
 
 

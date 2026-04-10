@@ -3,10 +3,12 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 
 from textguard import cli
+from textguard.types import ScanResult, SemanticResult
 
 
 def test_scan_help_includes_phase_five_flags(capsys: pytest.CaptureFixture[str]) -> None:
@@ -104,24 +106,42 @@ def test_scan_exit_codes_reflect_max_finding_severity(
     assert cli.main(["scan", str(error_path)]) == 3
 
 
-def test_scan_promptguard_flag_errors_with_install_hint(
+def test_scan_promptguard_flag_passes_model_path_through(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    observed_paths: list[Path | None] = []
+
+    def fake_scan(text: str, **kwargs: object) -> ScanResult:
+        observed_paths.append(cast(Path | None, kwargs.get("promptguard_model_path")))
+        return ScanResult(
+            semantic=SemanticResult(
+                score=0.91,
+                tier="critical",
+                classifier_id="promptguard-v2",
+            )
+        )
+
     monkeypatch.setattr("sys.stdin", io.StringIO("plain text"))
+    monkeypatch.setattr(cli, "scan", fake_scan)
 
     exit_code = cli.main(["scan", "-", "--promptguard", "/tmp/model-pack"])
     captured = capsys.readouterr()
 
-    assert exit_code == 2
-    assert "textguard[promptguard]" in captured.err
+    assert exit_code == 0
+    assert "SEMANTIC CRITICAL promptguard-v2" in captured.out
+    assert observed_paths == [Path("/tmp/model-pack")]
 
 
-def test_models_fetch_command_surface_returns_stub_error(
+def test_models_fetch_command_surface_installs_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    monkeypatch.setattr(cli, "fetch_promptguard_model", lambda model_name: tmp_path / model_name)
+
     exit_code = cli.main(["models", "fetch", "promptguard2"])
     captured = capsys.readouterr()
 
-    assert exit_code == 2
-    assert "Phase 7" in captured.err
+    assert exit_code == 0
+    assert captured.out.strip() == str(tmp_path / "promptguard2")

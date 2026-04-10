@@ -6,7 +6,7 @@ Hostile-text normalization, inspection, and cleaning for LLM-adjacent systems.
 
 ## Status
 
-Work in progress. This repo currently contains planning docs only. See [docs/PLAN.md](docs/PLAN.md) for the implementation plan.
+Working implementation in repo. The Python API, CLI, optional YARA backend, optional PromptGuard backend, and signed model fetch flow are all present; reviewer hardening and release work remain. See [docs/PLAN.md](docs/PLAN.md) for the architecture and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for the completed execution checklist.
 
 ## Protection Tiers
 
@@ -46,6 +46,7 @@ guard = TextGuard(
 )
 result = guard.scan(text)    # ScanResult
 cleaned = guard.clean(text)  # CleanResult
+semantic = guard.score_semantic(text)  # SemanticResult
 ```
 
 Top-level `scan()` and `clean()` are thin wrappers around `TextGuard` with default settings. For repeated calls or backend-enabled scanning, create a `TextGuard` instance.
@@ -112,8 +113,8 @@ Exit codes from `scan` reflect whether findings were detected, so it works in CI
 PromptGuard requires a ~295 MB ONNX model pack (`shisa-ai/promptguard2-onnx`). textguard never downloads models silently.
 
 ```bash
-# Clone or download the model pack manually
-git clone https://huggingface.co/shisa-ai/promptguard2-onnx ~/.local/share/textguard/models/promptguard2
+# Fetch, verify, and install to the XDG data dir
+textguard models fetch promptguard2
 
 # Point textguard to it
 export TEXTGUARD_PROMPTGUARD_MODEL=~/.local/share/textguard/models/promptguard2
@@ -122,7 +123,7 @@ export TEXTGUARD_PROMPTGUARD_MODEL=~/.local/share/textguard/models/promptguard2
 textguard scan --promptguard ~/.local/share/textguard/models/promptguard2 SKILL.md
 ```
 
-The implementation plan also includes a built-in `textguard models fetch promptguard2` command. It will download from Hugging Face via stdlib HTTP, verify the SSH ed25519 signature against the bundled public key, and check SHA-256 file hashes from the manifest.
+`textguard models fetch promptguard2` downloads from Hugging Face via stdlib HTTP, verifies the SSH ed25519 signature against the bundled public key, and checks SHA-256 file hashes from the manifest before installing under `~/.local/share/textguard/models/promptguard2/` (or `XDG_DATA_HOME` if set).
 
 ## Dependency Direction
 
