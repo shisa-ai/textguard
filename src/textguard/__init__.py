@@ -13,7 +13,7 @@ from .scan import dedupe_findings as _dedupe_findings
 from .scan import scan_text as _scan_text
 from .types import Change, CleanResult, Finding, FindingContext, ScanResult, SemanticResult
 
-__version__ = "0.0.0"
+__version__ = "0.9.0"
 
 
 class TextGuard:
