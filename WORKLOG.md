@@ -28,3 +28,10 @@ Chronological development log. Append new entries at the bottom. Do not rewrite 
 **Decision/Change**: Tightened `AGENTS.md` so it now states that commit-on-completion applies to docs, planning, and repo-setup work as well as code; that a task is a complete logical unit rather than every file edit; that commits should happen without waiting to be asked; and that smaller finished commits are preferred to reduce churn and loss of context.
 **Rationale**: This repo is still in the planning and scaffolding stage, so a lot of meaningful work is docs-first. The commit policy needs to be explicit that those changes are first-class committable units. Stronger wording also reduces drift, lowers the chance of losing context, and matches the team's preferred working style more closely.
 **Open questions**: None for the policy itself. The next question is whether the repo should also add `CHANGELOG.md` conventions now or defer that until the package is closer to its first release.
+
+### 2026-04-10 — Commit policy wording narrowed to logical-unit completion only
+
+**Context**: Re-reviewed the commit-policy wording after adding "prefer smaller finished commits over large batches". That phrase created ambiguity against the stronger primary rule of committing on logical-unit completion.
+**Decision/Change**: Removed the "prefer smaller finished commits" line from `AGENTS.md` and kept the clearer rules only: commit on logical-unit completion, treat docs/planning/repo-setup work as committable units, and do not wait to be asked.
+**Rationale**: The repo should optimize for coherent logical-unit commits, not for smaller commits as a separate goal. Keeping both rules invites misinterpretation and unnecessary oversplitting.
+**Open questions**: None. The commit policy is clearer without the extra size-oriented guidance.

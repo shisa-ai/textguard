@@ -58,7 +58,6 @@ If the repo is still sparse, create only the files required for the current task
 - Commit on task completion. A task is a complete logical unit, not every file edit.
 - This commit-on-completion rule applies to docs, planning, and repo-setup work too, not just code.
 - Do not wait to be asked to commit once the logical unit is complete.
-- Prefer smaller finished commits over large batches to reduce churn and loss of context.
 
 ## Security-Specific Rules
 
